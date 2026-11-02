@@ -158,6 +158,29 @@ if test -z "$op"
     exit 0
 end
 
+# ── Resolve optional second argument (project directory) ─────────
+if set -q argv[2]
+    # Accept only paths starting with / or ~ (or .., handled below)
+    if string match -rq '^/' "$argv[2]" || string match -rq '^~/' "$argv[2]" || string match -rq '\.\./' "$argv[2]"
+        # Normalize the path (expand ~, resolve ..)
+        set target_dir "$argv[2]"
+        if string match -q "~*" "$target_dir"
+            set target_dir (eval echo "$target_dir")
+        end
+        if not test -d "$target_dir"
+            echo (set_color red) "✗ Directory not found: $target_dir" (set_color normal)
+            exit 1
+        end
+        # Resolve to absolute path
+        set target_dir (realpath "$target_dir")
+        set mode "project"
+    else
+        echo (set_color red) "✗ Unknown argument: '$argv[2]'" (set_color normal)
+        __show_help
+        exit 0
+    end
+end
+
 # ── prerequisite check ────────────────────────────────────────────
 banner "Checking prerequisites…"
 
