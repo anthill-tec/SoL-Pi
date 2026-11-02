@@ -447,8 +447,11 @@ for p in providers:
             end
 
             if test -z "$prov_count"; or test "$prov_count" = "0"; or test (count $_prov_ids) -eq 0
-                # Extraction failed – fall back to defaults from env / previous run
-                info "EPR → $prov / $mdl"
+                # No providers available — abort with a clear message
+                rm -rf "$tmpdir"
+                echo (set_color red) "✗ SoL-Pi requires at least one provider and one model configured in your Pi instance."(set_color normal)
+                echo (set_color red) "✗ No providers found in query results. Cannot continue."(set_color normal)
+                exit 1
             else
 
                 # ── Phase A: select provider (Y / C / S loops) ─────────
@@ -489,10 +492,12 @@ for p in providers:
                         set p_choice "y"
                     end
 
-                    string match -ri 'y|yes' $p_choice >/dev/null 2>&1
-                    and break   # Provider confirmed → enter model selection loop
+                    if string match -riq '^(y|yes)$' -- $p_choice
+                        set prov "$cur_id"
+                        break   # Provider confirmed → enter model selection
+                    end
 
-                    if string match -ri 'c|cancel' $p_choice
+                    if string match -riq '^(c|cancel)$' -- $p_choice
                         rm -rf "$tmpdir"
                         echo (set_color red)"✗ Installation cancelled."(set_color normal)
                         exit 0
@@ -500,8 +505,8 @@ for p in providers:
 
                     # S = next provider (only when multiple exist)
                     if test "$_prov_count" -gt 1
-                        if string match -ri 's' $p_choice
-                            set cur_prov_idx (math ($cur_prov_idx % $_prov_count) + 1)
+                        if string match -riq '^s$' -- $p_choice
+                            set cur_prov_idx (math "$cur_prov_idx % $_prov_count + 1")
                             continue
                         end
                     end
@@ -520,9 +525,11 @@ for p in providers:
 
                 set -l mdl_count (count $_cur_mdl_list)
                 if test $mdl_count -eq 0
-                    # Provider has no models — use the default from env
-                    set prov "$cur_id"
-                    set mdl ""
+                    # Provider exists but has zero models — abort
+                    rm -rf "$tmpdir"
+                    echo (set_color red) "✗ SoL-Pi requires at least one provider and one model configured in your Pi instance."(set_color normal)
+                    echo (set_color red) "✗ Provider '$cur_id' ($cur_name) has no models. Cannot continue."(set_color normal)
+                    exit 1
                 else
                     set -l cur_mdl_idx 1
 
@@ -558,7 +565,7 @@ for p in providers:
                         # S = next model (only when multiple exist)
                         if test $mdl_count -gt 1
                             if string match -ri 's' $m_choice
-                                set cur_mdl_idx (math ($cur_mdl_idx % $mdl_count) + 1)
+                                set cur_mdl_idx (math "$cur_mdl_idx % $mdl_count + 1")
                                 continue
                             end
                         end
@@ -572,6 +579,28 @@ for p in providers:
     else
         set prov "provider-id"
         set mdl "model-id"
+    end
+
+    # ── Pre-flight validation: reject silent fallbacks when EPR is enabled ─
+    if test "$do_epr" = "true"
+        if test "$prov" = "provider-id"; or test -z "$prov"
+            rm -rf "$tmpdir"
+            echo (set_color red) "✗ SoL-Pi requires at least one provider and one model configured in your Pi instance."(set_color normal)
+            if test -z "$prov"
+                echo (set_color red) "✗ No providers found in query results. Cannot continue."(set_color normal)
+            else
+                echo (set_color red) "✗ Provider '$prov' is a placeholder — no real provider selected."(set_color normal)
+            end
+            echo (set_color yellow) "  Configure a provider + model in Pi and re-run setup-sol-pi.fish"(set_color normal)
+            exit 1
+        end
+        if test "$mdl" = "model-id"; or test -z "$mdl"
+            rm -rf "$tmpdir"
+            echo (set_color red) "✗ SoL-Pi requires at least one provider and one model configured in your Pi instance."(set_color normal)
+            echo (set_color red) "✗ Provider '$prov' has no models configured. Cannot continue."(set_color normal)
+            echo (set_color yellow) "  Configure a provider + model in Pi and re-run setup-sol-pi.fish"(set_color normal)
+            exit 1
+        end
     end
 
     # ── Build JSON via python3 — avoids fish quoting and heredoc issues ───
