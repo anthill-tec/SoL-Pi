@@ -3,7 +3,7 @@
 **Status:** PENDING · Pre-review: due — touches another project's surface (pi-subagents' published service); reported by Crucible's Mainline, Sandesh message #1531
 **Type:** defect
 **Priority:** P1 — a boundary compaction stops every running background sub-agent of a Model B orchestrator
-**Depends on:** none
+**Depends on:** CR-SLP-001
 **Labels:** online-context-compact, compatibility, subagents
 **Phase:** 0.1.0 · wave 1
 **Design reference:** `docs/compatibility.md` (`## Online Context Compact`); Crucible's fix request, Sandesh message #1531
