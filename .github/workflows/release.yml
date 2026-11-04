@@ -6,15 +6,15 @@
 # needs a skipped job is itself skipped, silently.
 #
 # - A release or hotfix push runs the tests and the rehearsal.
-# - A master push runs the tests and create-release, which releases the
+# - A main push runs the tests and create-release, which releases the
 #   version tag at HEAD.
 # - A published release runs the tests.
 # Every publish needs the tests.
 #
-# Recovery: when the master run finds no version tag at HEAD, dispatch
-# the workflow on master.
+# Recovery: when the main run finds no version tag at HEAD, dispatch
+# the workflow on main.
 #
-# A red run: when the master run or the release run fails its tests,
+# A red run: when the main run or the release run fails its tests,
 # nothing publishes. Re-run the failed jobs; a real failure is fixed on
 # a hotfix branch.
 #
@@ -26,7 +26,7 @@ name: release
 
 on:
   push:
-    branches: [master, "release/**", "hotfix/**"]
+    branches: [main, "release/**", "hotfix/**"]
   release:
     types: [published]
   workflow_dispatch:
@@ -50,7 +50,7 @@ jobs:
   create-release:
     needs: [test-bun]
     if: >-
-      github.ref == 'refs/heads/master' &&
+      github.ref == 'refs/heads/main' &&
       (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
     permissions:
