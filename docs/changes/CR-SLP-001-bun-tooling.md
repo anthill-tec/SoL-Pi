@@ -178,6 +178,7 @@ Context.
   coverage of the guide.
 - The `then_run` command used as test data in `tests/action-fusion.test.ts` and
   `tests/evidence-preserving-reducer.test.ts` is `bun test`.
+- `CHANGELOG.md` `[Unreleased]` records the move to Bun and the removal of Vitest.
 
 ### §S7 — CI on the same Bun
 
@@ -215,6 +216,7 @@ Context.
 - [ ] **§S6** `git grep -n -E '\bnpx\b|\bnpm (ci|run|test|audit|pack)\b|\bnode scripts/|vitest' -- . ':!docs/changes' ':!CHANGELOG.md'`
       returns nothing.
 - [ ] **§S6** `bun run check` exits 0.
+- [ ] **§S6** `CHANGELOG.md` `[Unreleased]` has an entry for the move to Bun.
 - [ ] **§S6** `examples/sol-pi-skill/tests/test_sol_pi_skill.py` passes through the python
       client.
 - [ ] **§S7** The `test-bun` job's `setup-bun` step has `bun-version: 1.4.4`, and its test
