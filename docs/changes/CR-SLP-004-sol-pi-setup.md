@@ -1,12 +1,15 @@
-# CR-SLP-004 — An installed `sol-pi-setup` command with a per-project mode
+# CR-SLP-004 — `sol-pi-setup`, an installed AXI command for per-project setup
 
-**Status:** PENDING · Pre-review: due — touches another project's surface (Model B runs this command from `modelb-axi init` and `agents`, message #1516 items 1–4); 8 points
+**Status:** PENDING · Pre-review: due — touches another project's surface (Model B runs this command from `modelb-axi init` and `agents`, message #1516 items 1–4); 8 points; re-scoped after its pre-review (AXI adopted, prompts split to CR-SLP-005)
 **Type:** feature
 **Priority:** P1 — Model B makes SoL-Pi a prerequisite of every Model B project on Pi
 **Depends on:** CR-SLP-001
-**Labels:** setup, cli, install, docs
+**Labels:** setup, cli, axi, install, docs
 **Phase:** 0.1.0 · wave 1
-**Design reference:** `docs/configuration.md` (search order, schema, trust); Model B's request, Sandesh message #1516 items 1–4
+**Design reference:** the AXI standard (<https://axi.md>; its skill, `kunchenguid/axi`
+`.agents/skills/axi/SKILL.md`); the TOON specification (<https://toonformat.dev>);
+`docs/configuration.md` (search order, schema, trust); Model B's request, Sandesh message #1516
+items 1–4
 
 ## Context
 
@@ -19,162 +22,230 @@ installer puts on the machine, never through a checkout. It asked for (#1516):
 2. a light per-project mode, `--install <project dir>`, that writes or refreshes only
    `<project dir>/.pi/sol-pi.json`: no dependency install, typecheck, tests or audit, no user-wide
    `pi install`, and no `.bak` left in the project;
-3. prompts only when a person is at a terminal, plus a documented non-interactive switch and
+3. prompts only when a person is at a terminal, plus a non-interactive switch and
    `PI_NONINTERACTIVE`, which take the defaults and never prompt;
-4. distinct exit codes for written or unchanged, failure and cancel, and a final machine-readable
-   line with the outcome and path.
+4. distinct exit codes and a final machine-readable result with the outcome and path.
 
-`setup-sol-pi.fish --install <dir>` today validates the checkout (dependency install, typecheck,
-tests, audit), always registers SoL-Pi user-wide with `pi install`, writes
-`<dir>/.pi/sol-pi.json` and leaves `<dir>/.pi/sol-pi.json.bak` beside it, and exits 0 when the
-user cancels a prompt. It clones `https://github.com/NVlabs/SoL-Pi.git` when SoL-Pi is missing;
-this project is `anthill-tec/SoL-Pi`.
+The command follows the AXI standard for agent-facing command lines, as Model B's own
+`modelb-axi` and Crucible's clients do: a TOON envelope on standard output, errors in the same
+envelope, exit codes 0/1/2, no prompts, every value settable by flag, unknown input rejected, a
+home view for no arguments, next steps in `help[]`, and a fast `--version`. Model B's item 3 is met
+by prompting only on request (`--interactive`, CR-SLP-005); `PI_NONINTERACTIVE` still forbids it.
+Model B's item 4 is met by the envelope, or one JSON line with `--format json`.
 
-SoL-Pi reads `<project>/.pi/sol-pi.json` only in a trusted project, and otherwise
-`<agent dir>/sol-pi.json` (`findConfigPath`, `loadSolPiConfig`). Pi's agent directory is
-`$PI_CODING_AGENT_DIR`, else `~/.pi/agent`; its `settings.json` holds `defaultProvider` and
-`defaultModel`. The setup script's defaults enable all four mechanisms, use a
-`cacheWriteReadRatio` of 12.5, and point the Evidence-Preserving Reducer at Pi's default provider
-and model.
+**Configuration semantics** (`docs/configuration.md`, `findConfigPath`, `loadSolPiConfig`). SoL-Pi
+reads `<project>/.pi/sol-pi.json` only in a trusted project, and otherwise
+`<agent dir>/sol-pi.json`. The project file replaces the global file; the two are not merged. An
+omitted feature key is `false`, an omitted reducer provider or model is the built-in route
+(`DEFAULT_REDUCER_PROVIDER`, `DEFAULT_REDUCER_MODEL`), and an omitted `cacheWriteReadRatio` is
+12.5. The validation rules exist three times: `loadSolPiConfig`, `scripts/check-sol-pi-config.mjs`
+and the setup script's `jq` checks. The setup script's defaults enable all four mechanisms, use a
+ratio of 12.5, and point the reducer at Pi's default provider and model.
+
+**Pi.** Pi's agent directory is `$PI_CODING_AGENT_DIR` (a leading `~` expanded), else
+`~/.pi/agent`. Its `settings.json` holds `defaultProvider` and `defaultModel`. Pi 1.5's package
+manager installs packages with peers omitted.
+
+**Bun.** A Bun script loads the `.env` and `bunfig.toml` of the directory it runs in. Measured
+with a globally installed test command run inside a directory with its own `.env` and
+`bunfig.toml`: the `.env` values reached the command, and a `preload` from that `bunfig.toml` ran.
+`#!/usr/bin/env -S bun --no-env-file --config=/dev/null` stopped both. `bun add --global` installs
+a package's non-optional peer dependencies.
+
+**TOON.** The official TypeScript encoder is `@toon-format/toon` (MIT, no dependencies; 4.4.0
+current). Crucible pins it as its reference implementation.
 
 ## Scope
 
 ### §S1 — The installed command
 
-**Surfaces:** `package.json` (`bin`, `files`, `peerDependenciesMeta`), a new `bin/sol-pi-setup.mjs`.
+**Surfaces:** `package.json` (`bin`, `files`, `dependencies`, `peerDependenciesMeta`), a new
+`bin/sol-pi-setup.mjs`, a new version leaf module.
 
-- `package.json` declares `"bin": { "sol-pi-setup": "bin/sol-pi-setup.mjs" }` and ships the file.
-  The command runs under Bun (`#!/usr/bin/env bun`).
-- It is installed with `bun add --global github:anthill-tec/SoL-Pi#<version>`; `npm install
-  --global github:anthill-tec/SoL-Pi#<version>` is the documented alternative. Model B probes
-  `sol-pi-setup` on `PATH`.
-- `sol-pi-setup --version` prints the package's `version` and nothing else, and exits 0.
-  `sol-pi-setup --help` prints the usage and exits 0.
-- The command imports no Pi package. The Pi peer dependencies and `typebox` are marked optional,
-  so a global install of SoL-Pi installs no second Pi.
+- `package.json` declares `"bin": { "sol-pi-setup": "bin/sol-pi-setup.mjs" }` and ships it.
+- The command runs under Bun with `#!/usr/bin/env -S bun --no-env-file --config=/dev/null`, so the
+  `.env` and `bunfig.toml` of the directory it runs in do not reach it.
+- It is installed with `bun add --global github:anthill-tec/SoL-Pi#<version>`. `npm install
+  --global github:anthill-tec/SoL-Pi#<version>` is the documented alternative, which still needs
+  Bun on `PATH`. Model B probes `sol-pi-setup` on `PATH`, so Bun's global `bin` directory must be
+  on `PATH`.
+- `@toon-format/toon` is a runtime dependency at exactly `4.4.0`, SoL-Pi's only one.
+- The command imports no Pi package. The Pi peer dependencies and `typebox` are marked optional in
+  `peerDependenciesMeta`, so `bun add --global` installs no Pi package.
+- **Version fast path.** `-v`, `-V` and `--version`, as the only argument, print the bare version
+  and exit 0. The version comes from a leaf module that imports nothing; the rest of the command
+  loads through a dynamic `import()` only after that check.
 
 ### §S2 — `sol-pi-setup --install <project dir>`
 
-**Surfaces:** `bin/sol-pi-setup.mjs`, a Pi-free configuration module shared with
-`src/sol-pi/config.ts`.
+**Surfaces:** `bin/sol-pi-setup.mjs` and its modules, a new Pi-free configuration module that
+`src/sol-pi/config.ts` and `scripts/check-sol-pi-config.mjs` also use.
 
-- It writes or refreshes `<project dir>/.pi/sol-pi.json` and nothing else. It creates
+- **Scope of the run.** It writes at most `<project dir>/.pi/sol-pi.json`, creating
   `<project dir>/.pi/` when missing. It runs no dependency install, typecheck, test or audit,
-  registers nothing with Pi, and never touches the user-wide configuration.
-- **Values.** Each key comes from the first of: the project's existing `.pi/sol-pi.json`; the
-  agent directory's `sol-pi.json`; the built-in defaults: all four mechanisms enabled,
-  `cacheWriteReadRatio` 12.5, and the reducer on Pi's `defaultProvider` and `defaultModel` from
-  the agent directory's `settings.json`.
-- **Validation.** The configuration it writes passes the same validation as `loadSolPiConfig`,
-  through one implementation both use. An existing project or agent-directory configuration that
-  fails validation fails the run and is left untouched.
-- **Output file.** The file is written in one canonical form: every key in the schema's order,
-  tab indentation, a final newline. When the canonical text equals the file's bytes, nothing is
-  written (`unchanged`). Otherwise the text goes to a temporary file in the same directory, which
-  is renamed over the target (`written`). No `.bak` or temporary file is left.
-- **Missing model.** When the reducer is enabled and no provider or model can be resolved, the run
-  fails and writes nothing.
+  registers nothing with Pi, and writes nothing outside that file.
+- **Base values.** When the project file exists and is valid, its effective values (the runtime
+  defaults for omitted keys). Otherwise, the agent directory's `sol-pi.json` when it exists, read
+  the same way. Otherwise the setup defaults: all four mechanisms enabled, ratio 12.5, the reducer
+  on Pi's `defaultProvider` and `defaultModel`.
+- **Flags override the base** (§S3). With no value flag, an existing valid project file is left
+  untouched: the run is a no-op (`unchanged`). The agent directory's file is not consulted when a
+  project file exists.
+- **Pi settings.** Read only when the setup defaults are used: the agent directory's
+  `settings.json`, not a project's `.pi/settings.json`. A missing file means no Pi default; a
+  malformed one fails the run. Setup defaults with no Pi default provider or model and no
+  `--reducer` flag fail the run.
+- **Validation.** One Pi-free module holds the schema and validation; `loadSolPiConfig` and
+  `scripts/check-sol-pi-config.mjs` use it. An invalid file the run needs fails it and is left
+  untouched.
+- **Written form.** Every key, in the order of `sol-pi.example.json`, tab indentation, a final
+  newline. With the reducer disabled and no provider or model to hand, the reducer keys are the
+  built-in route, so the file always passes validation. When the text equals the file's bytes,
+  nothing is written (`unchanged`).
+- **Writing.** The text goes to a temporary file in the target's directory, renamed over the
+  target. Through a symbolic link, the link's target file is replaced and the link kept. An existing
+  file's permission bits are kept. The temporary file is removed on every failure and on `SIGINT`,
+  `SIGTERM` and `SIGHUP`.
+- **Earlier backups.** A `sol-pi.json.bak` left by an earlier setup script is not touched; a
+  warning names it.
 
-### §S3 — Interactive only at a terminal
+### §S3 — Every value by flag; no prompts
 
 **Surfaces:** `bin/sol-pi-setup.mjs`.
 
-- The run prompts when standard input is a terminal, and `--non-interactive` is not given, and
-  `PI_NONINTERACTIVE` is unset or empty. Otherwise it takes the resolved values without prompting.
-- The prompts cover each mechanism, the reducer's provider and model (offering the models Pi lists
-  in `enabledModels`), and the cache ratio, each defaulting to the resolved value. The run then
-  shows the resulting configuration and asks for confirmation before writing.
-- Declining the confirmation, end of input at a prompt, or an interrupt (`SIGINT`) cancels the run;
-  nothing is written.
+- `--features <list>`: the enabled mechanisms, a comma-separated subset of `actionFusion`,
+  `observationPack`, `evidencePreservingReducer`, `onlineContextCompact`, or `all` or `none`; the
+  rest are disabled.
+- `--reducer <provider>/<model>`: the reducer's provider and model (the model may contain `/`).
+- `--cache-ratio <number>`: a finite non-negative number.
+- `--format toon|json`: the output encoding; `toon` by default.
+- The command never prompts without `--interactive` (CR-SLP-005). A required value it cannot
+  resolve fails the run, with the flag that supplies it in `help[]`.
 
-### §S4 — Exit codes and the result line
+### §S4 — AXI output, errors and exit codes
 
 **Surfaces:** `bin/sol-pi-setup.mjs`.
 
-- Exit codes: 0 when the file is written or unchanged; 1 on a failure (an invalid existing
-  configuration, no provider or model, a missing project directory, a write error); 2 on a usage
-  error (an unknown option, `--install` without a directory); 130 on a cancel.
-- Standard output carries one line, the last thing an `--install` run prints:
-  `{"outcome":"written"|"unchanged"|"failed"|"usage"|"cancelled","path":<absolute config path or null>,"version":"<version>"}`,
-  with an `"error"` string added for `failed` and `usage`. Prompts and messages go to standard
-  error.
+- **Envelope.** Standard output carries one TOON document, encoded with `@toon-format/toon`, whose
+  root key is `axi`: `verb`, `ok`, `outcome` (`written`, `unchanged`, `failed`, `usage`, or
+  `cancelled` from CR-SLP-005), `path` (the absolute configuration path, or `null`), `version`,
+  `config` (`features` as a list of the enabled mechanisms, `reducer` as `<provider>/<model>`,
+  `cacheRatio`), `context` (`project`, `agentDir`), `warnings`, `help`, and `error` when `ok` is
+  false. `--format json` writes the same object as one JSON line.
+- **Channels.** Standard output carries only the envelope; diagnostics go to standard error.
+- **Exit codes.** 0 for `written` and `unchanged` (a no-op is success); 1 for `failed` (an invalid
+  configuration or `settings.json`, no provider or model, a missing project directory, a write
+  error); 2 for `usage`. Errors are envelopes on standard output, with no stack trace.
+- **Unknown input.** An unknown flag, a repeated flag, an extra argument, `--install` without a
+  directory, and a malformed flag value are usage errors, checked before anything is read. The
+  error names the offending input and lists the valid flags.
+- **Next steps.** `help[]` carries complete commands with `<placeholders>`: after `written`, start
+  Pi in the project and trust it there (SoL-Pi reads the project file only in a trusted project);
+  after an error, the command or flag that fixes it. A self-contained result carries none.
+- **Home view.** With no arguments, the command prints, as an envelope with `verb` `home`: its
+  executable path with the home directory as `~`, a one-sentence description, and the state of
+  the working directory: whether `.pi/sol-pi.json` exists, its enabled mechanisms and reducer, and
+  whether the agent directory has a `sol-pi.json`; with next steps. Exit 0.
+- **Help.** `--help` prints the flags with their defaults, the arguments and two or three examples,
+  and exits 0.
+- `PI_CODING_AGENT_DIR` is read as Pi reads it, including a leading `~`. A relative project
+  directory resolves against the working directory.
 
-### §S5 — The fish setup script
-
-**Surfaces:** `setup-sol-pi.fish`, `tests/setup-prompt-flow.test.ts`.
-
-- `--install <dir>` runs the checkout's `bin/sol-pi-setup.mjs --install <dir>` with the terminal
-  passed through, and exits with its code. It no longer validates the checkout, runs `pi install`,
-  or writes a `.bak`. When `pi list` does not show SoL-Pi, it says that the user-wide setup
-  (`--install` with no directory) is still needed.
-- `--install` with no directory (the user-wide setup) keeps its phases.
-- The clone URL is `https://github.com/anthill-tec/SoL-Pi.git`.
-- A cancelled prompt exits 130, not 0.
-
-### §S6 — Documentation and changelog
+### §S5 — Documentation and changelog
 
 **Surfaces:** `README.md`, `agents-install.md`, `docs/configuration.md`, `CHANGELOG.md`.
 
-- README and `agents-install.md` document the install command, `sol-pi-setup --install`, its
-  switches, `PI_NONINTERACTIVE`, the exit codes and the result line.
+- README and `agents-install.md` document:
+  - the install command and its npm alternative, that both need Bun, and that Bun's global `bin`
+    directory must be on `PATH`;
+  - `sol-pi-setup --install`, its flags, `PI_NONINTERACTIVE`, the envelope, `--format json` and
+    the exit codes;
+  - that the Pi extension (`pi install git:github.com/anthill-tec/SoL-Pi@<version>`) and the
+    command are two installs, made at the same version.
+- README installs the Pi package from `anthill-tec/SoL-Pi`, not `NVlabs/SoL-Pi`.
+- The statements that SoL-Pi reads no environment variables say instead that the extension reads
+  none, and `sol-pi-setup` reads `PI_NONINTERACTIVE` and `PI_CODING_AGENT_DIR`.
 - `docs/configuration.md` notes that a project's `.pi/sol-pi.json` is read only in a trusted
-  project.
-- `CHANGELOG.md` `[Unreleased]` records the command and the setup script's changes.
+  project, and how `sol-pi-setup` chooses its values.
+- `THIRD_PARTY_NOTICES.md` lists `@toon-format/toon`.
+- `CHANGELOG.md` `[Unreleased]` records the command.
 
 ## Acceptance criteria
 
-- [ ] **§S1** `bun pm pack` lists `bin/sol-pi-setup.mjs`, and `package.json` maps `sol-pi-setup`
-      to it.
+Tests run the command against a temporary project, agent directory and home, with
+`PI_CODING_AGENT_DIR` set, and decode its output with `@toon-format/toon`'s `decode`.
+
+- [ ] **§S1** `bun pm pack` lists `bin/sol-pi-setup.mjs` and the leaf version module; `package.json`
+      maps `sol-pi-setup` to it, with the shebang §S1 gives, and `dependencies` is exactly
+      `{"@toon-format/toon": "4.4.0"}`.
 - [ ] **§S1** Installing the packed tarball with `bun add --global` into a temporary `BUN_INSTALL`
-      puts `sol-pi-setup` in that install's `bin`, `sol-pi-setup --version` there prints
-      `package.json`'s version, and the install adds no `@earendil-works/*` package.
-- [ ] **§S1** `bin/sol-pi-setup.mjs` and the module it imports import no `@earendil-works/*`
-      package.
-- [ ] **§S1** Pi still loads SoL-Pi from `pi install` of the packed package with the peers marked
-      optional (the package integration tests pass).
-- [ ] **§S2** In a temporary project and agent directory, a non-interactive `--install` with no
-      configuration anywhere writes the built-in defaults with Pi's default provider and model,
-      exits 0, and prints `outcome` `written`; a second run prints `unchanged` and leaves the
-      file's bytes and modification time alone.
-- [ ] **§S2** An agent-directory `sol-pi.json` supplies the values when the project has none; an
-      existing project file's values win over both.
-- [ ] **§S2** An invalid existing project or agent configuration exits 1 with `failed`, and the
-      project file's bytes are unchanged.
-- [ ] **§S2** With the reducer enabled and no `defaultProvider` or `defaultModel`, the run exits 1
-      with `failed` and creates no file.
-- [ ] **§S2** After any run, `<project dir>/.pi/` holds no file other than `sol-pi.json`.
-- [ ] **§S2** Every written file is accepted by `loadSolPiConfig`.
-- [ ] **§S3** With `--non-interactive`, or with `PI_NONINTERACTIVE=1`, a run on a terminal does
-      not prompt; without a terminal, no run prompts.
-- [ ] **§S3** On a pseudo-terminal, answering the prompts writes the chosen values; declining the
-      confirmation, closing input, or sending `SIGINT` exits 130 with `cancelled` and writes
-      nothing.
-- [ ] **§S4** An unknown option and `--install` without a directory exit 2 with `usage`; a missing
-      project directory exits 1 with `failed`.
-- [ ] **§S4** Every `--install` run's standard output is exactly one JSON line with the fields §S4
-      lists.
-- [ ] **§S5** `setup-sol-pi.fish --install <dir>` on a temporary project runs no `pi install`,
-      leaves no `.bak`, and exits with `sol-pi-setup`'s code; a cancelled prompt exits 130.
-- [ ] **§S5** `git grep -n NVlabs/SoL-Pi.git -- setup-sol-pi.fish` returns nothing.
-- [ ] **§S6** README and `agents-install.md` name the install command, the probe, `--version`,
-      `--install`, `--non-interactive`, `PI_NONINTERACTIVE`, the four exit codes and the result
-      line; `tests/install-guide.test.ts` passes.
+      puts `sol-pi-setup` in that install's `bin` and adds no `@earendil-works/*` or `typebox`
+      package; `sol-pi-setup --version` there prints `package.json`'s version.
+- [ ] **§S1** Run from a directory whose `.env` sets `PI_CODING_AGENT_DIR` and whose `bunfig.toml`
+      has a `preload`, the installed command does not see the variable and the preload does not
+      run.
+- [ ] **§S1** `bin/sol-pi-setup.mjs` and the modules it imports import no `@earendil-works/*`
+      package; the version module imports nothing.
+- [ ] **§S1** `pi install` of the packed tarball into a temporary agent directory succeeds offline,
+      and `pi list` shows it.
+- [ ] **§S1** `-v`, `-V` and `--version` each print the bare version and exit 0, and take no more
+      than twice the time of `bun -e "console.log(1)"` measured in the same test.
+- [ ] **§S2** With no configuration anywhere, `--install` writes the setup defaults with Pi's
+      default provider and model, exits 0 and reports `written`; a second run reports `unchanged`
+      and leaves the bytes and modification time alone.
+- [ ] **§S2** A valid partial project file (for example `{"version":1,"actionFusion":true}`) is
+      left byte-for-byte unchanged by a run with no value flag, which reports `unchanged`, even
+      when the agent directory's file is invalid and Pi has no default model.
+- [ ] **§S2** With no project file, the agent directory's `sol-pi.json` supplies the values.
+- [ ] **§S2** An invalid project file, or an invalid agent-directory file when there is no project
+      file, exits 1 with `failed`, and no file changes; so does a malformed `settings.json` when
+      the setup defaults are used.
+- [ ] **§S2** With the setup defaults, no Pi default provider or model and no `--reducer`, the run
+      exits 1 with `failed`, creates no file, and its `help[]` names `--reducer`.
+- [ ] **§S2** Listing `<project dir>/.pi/` before and after any run shows no added file other than
+      `sol-pi.json`; a leftover `sol-pi.json.bak` is still there and named in `warnings`.
+- [ ] **§S2** Every written file is accepted by `loadSolPiConfig` and by
+      `scripts/check-sol-pi-config.mjs`, and both use the shared module.
+- [ ] **§S2** A write through a symbolic link replaces the link's target and keeps the link; an
+      existing file's permission bits are kept; a run killed with `SIGTERM` during the write
+      leaves no temporary file.
+- [ ] **§S3** `--features`, `--reducer` and `--cache-ratio` each override the base values and
+      write; repeating the same flags reports `unchanged`. `--features all` and `--features none`
+      work.
+- [ ] **§S3** With standard input a terminal and no `--interactive`, the command does not prompt.
+- [ ] **§S4** Every run's standard output decodes as TOON to one object with root key `axi` and the
+      keys §S4 lists; with `--format json` it is one line that parses as the same object.
+- [ ] **§S4** An unknown flag, a repeated flag, an extra argument, `--install` without a directory
+      and a malformed `--features`, `--reducer` or `--cache-ratio` value each exit 2 with `usage`,
+      an `error` naming the input, and the valid flags; a missing project directory exits 1.
+- [ ] **§S4** No error output contains a stack trace or a dependency's raw message.
+- [ ] **§S4** `written` carries the start-Pi and trust next steps in `help[]`; `unchanged` carries
+      none.
+- [ ] **§S4** No arguments prints the home view and exits 0; `--help` exits 0 and names every
+      flag with its default.
+- [ ] **§S4** `PI_CODING_AGENT_DIR=~/agent` reads `$HOME/agent`; a relative project directory
+      resolves against the working directory.
+- [ ] **§S5** README and `agents-install.md` cover every item §S5 lists, and
+      `tests/install-guide.test.ts` checks them; `git grep -n NVlabs -- README.md agents-install.md`
+      returns nothing.
 - [ ] **Gate** `pre-merge-gate` passes.
 
 ## Estimated size
 
-8 points. A new command with interactive, non-interactive and failure paths, its install path,
-the fish script's rewiring, and docs.
+8 points. A non-interactive command with an install path, flags, an AXI envelope and its failure
+paths, a shared validation module and docs.
 
 ## Risks
 
-- Marking the Pi peers optional changes how package managers install SoL-Pi. Pi loads extensions
-  against its own Pi packages; the §S1 integration criterion checks that this still holds.
+- `@toon-format/toon` becomes a runtime dependency, so `pi install` installs it alongside the
+  extension. It has no dependencies of its own.
 - A GitHub install builds nothing, so the command must run from source as shipped.
 
 ## Non-goals
 
-- An `--uninstall` mode for `sol-pi-setup`.
+- Prompts, cancel handling and the fish script (CR-SLP-005).
+- An `--uninstall` mode.
+- AXI session integrations (hooks) and an installable skill for the command.
 - Publishing to the npm registry (the name `sol-pi` belongs to another publisher).
-- Changing what the user-wide setup does, or recording a project as trusted in Pi.
-- Removing `setup-sol-pi-interactive.mjs` or `scripts/query-pi-models.mjs`.
+- Reading a project's `.pi/settings.json` for Pi defaults, or recording trust in Pi.
+- Keeping the Pi extension and the command at the same version automatically.
