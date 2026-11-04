@@ -34,11 +34,11 @@ For ordinary repository changes, preserve the same compatibility and secret-hand
 Pre-wave tasks — not a wave; a wave is a grouping of CRs.
 
 - [x] Scaffold via `modelb-axi init` — 2026-11-04
-- [ ] Register the project in Crucible and paste the key into `.env` (`CRUCIBLE_PROJECT_KEY=`) — manual step (registrations are manual in scaffold v1)
-- [ ] Once the key is filled, register the orchestrator (`register --agent vidushi-solpi --role ORCHESTRATOR`), then mirror the root `.env`'s keys, except `CRUCIBLE_PROJECT_KEY`, with `project-meta --set KEY=VALUE … --agent vidushi-solpi`; re-run it whenever `.env` changes
-- [ ] Commit `bun.lock` — the release workflow's `test-bun` job installs from the frozen lockfile
+- [x] Register the project in Crucible and paste the key into `.env` (`CRUCIBLE_PROJECT_KEY=`) — manual step (registrations are manual in scaffold v1)
+- [x] Once the key is filled, register the orchestrator (`register --agent vidushi-solpi --role ORCHESTRATOR`), then mirror the root `.env`'s keys, except `CRUCIBLE_PROJECT_KEY`, with `project-meta --set KEY=VALUE … --agent vidushi-solpi`; re-run it whenever `.env` changes
+- [x] Commit `bun.lock` — the release workflow's `test-bun` job installs from the frozen lockfile
 - [ ] Add the `RELEASE_PAT` repository secret, a token with `contents: write` — the release workflow's `create-release` job creates the release with it, so the release fires the publish run
-- [ ] Confirm the remote owner matches `REPO_OWNER` in `.env` before the first wave-boundary gate
+- [x] Confirm the remote owner matches `REPO_OWNER` in `.env` before the first wave-boundary gate
 
 ## Skill freeze (derived from --stacks: bun)
 - bun: use the generated RED/GREEN/VERIFY/FIX agents, rendered at scaffold time; re-render them with `modelb-axi agents`.
