@@ -37,7 +37,7 @@ Pre-wave tasks — not a wave; a wave is a grouping of CRs.
 - [x] Register the project in Crucible and paste the key into `.env` (`CRUCIBLE_PROJECT_KEY=`) — manual step (registrations are manual in scaffold v1)
 - [x] Once the key is filled, register the orchestrator (`register --agent vidushi-solpi --role ORCHESTRATOR`), then mirror the root `.env`'s keys, except `CRUCIBLE_PROJECT_KEY`, with `project-meta --set KEY=VALUE … --agent vidushi-solpi`; re-run it whenever `.env` changes
 - [x] Commit `bun.lock` — the release workflow's `test-bun` job installs from the frozen lockfile
-- [ ] Add the `RELEASE_PAT` repository secret, a token with `contents: write` — the release workflow's `create-release` job creates the release with it, so the release fires the publish run
+- [x] Add the `RELEASE_PAT` repository secret, a token with `contents: write` — the release workflow's `create-release` job creates the release with it, so the release fires the publish run
 - [x] Confirm the remote owner matches `REPO_OWNER` in `.env` before the first wave-boundary gate
 
 ## Skill freeze (derived from --stacks: bun)
