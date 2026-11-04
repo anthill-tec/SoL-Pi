@@ -1,6 +1,6 @@
 # CR-SLP-001 — Move the project's tooling to Bun; remove Vitest
 
-**Status:** PENDING · Pre-review: due — the gap analysis needed rulings from the user (the test runner, Bun tooling everywhere)
+**Status:** PENDING · Pre-review: ran — the gap analysis needed rulings from the user (the test runner, Bun tooling everywhere)
 **Type:** maintenance
 **Priority:** P0 — every later CR's RED/GREEN/VERIFY runs, the pre-merge gate and CI run `bun test`
 **Depends on:** none
@@ -93,13 +93,15 @@ enabled: %s)`.
 
 ### §S2 — Replace the Vitest API that Bun lacks
 
-**Surfaces:** `tests/helpers.ts`, `tests/online-context-compact.test.ts`,
+**Surfaces:** `tests/helpers.ts`, a new `tests/helpers.test.ts`, `tests/online-context-compact.test.ts`,
 `tests/online-context-compact-cli.test.ts`, `tests/observation-pack.test.ts`.
 
 - `waitFor` in `tests/helpers.ts` keeps Vitest's `vi.waitFor` contract: it calls the callback
   until it returns without throwing, every 50 ms for at most 1000 ms by default (both
   overridable), resolves to the callback's value, and on timeout rejects with the callback's last
-  error. Each `vi.waitFor(...)` call becomes `waitFor(...)` with the same arguments.
+  error. Like `vi.waitFor`, it polls on real timers even while fake timers are installed. Each
+  `vi.waitFor(...)` call becomes `waitFor(...)` with the same arguments. Its own tests live in a
+  new `tests/helpers.test.ts`.
 - Each `expect.soft(...)` becomes `expect(...)` with the same matcher and expected value.
 - The two symlink tests decide their skip when they are registered: `it.skipIf(!symlinksSupported)`
   with `symlinksSupported` resolved once at the top of the file from the existing
@@ -109,13 +111,24 @@ enabled: %s)`.
 
 **Surfaces:** `tests/online-context-compact-projection.test.ts`, the codemode tests in
 `tests/codemode-compat.test.ts`, `tests/observation-pack.test.ts`,
-`tests/online-context-compact-agent-session.test.ts`, and the four `it.each` tables named in
+`tests/online-context-compact-agent-session.test.ts`, `tests/package.test.ts`, the tests that start Pi in a child process, and the four `it.each` tables named in
 Context.
 
 - The projection test computes every value it derives from `projected` before its
   `toMatchObject` assertion, so the assertion sees and checks the same data as today.
 - Every test that starts codemode leaves no codemode worker running or shutting down when it
-  ends, so the next codemode test starts with Pi's full worker allowance, in any file order.
+  ends, so the next codemode test starts with Pi's full worker allowance, whichever codemode test
+  ran before it.
+- **Type fixes for `@types/bun`.** `describe`'s options argument (`{ timeout: 30_000 }` in
+  `tests/package.test.ts`), which Bun's types do not accept, becomes a per-test timeout with the
+  same value on each test of that block. The two `toEqual` calls whose expected value is an
+  indexed `T | undefined` (`tests/codemode-compat.test.ts`, `tests/observation-pack.test.ts`)
+  narrow it first, keeping the comparison.
+- **Pi runs on Node, as under Vitest.** The tests that start Pi's CLI or the compatibility script
+  in a child process (`tests/online-context-compact-cli.test.ts`,
+  `tests/pi-package-integration.test.ts`, `tests/sol-pi-config-preflight.test.ts`,
+  `tests/package.test.ts`) start it with `node`, Pi's own runtime, in place of
+  `process.execPath`, which is Bun under `bun test`.
 - Each of the four `it.each` tables passes its rows so that Bun formats `%s`, giving each test the
   title Vitest gives it (for example `… (failed=false)` and `… (failed=true)`).
 
@@ -136,8 +149,9 @@ Context.
 `bunfig.toml`.
 
 - `package.json`:
-  - `scripts.test` is `bun test`;
-  - `scripts.check` is `bun run typecheck && bun test && bun pm pack --dry-run`;
+  - `scripts.test` is `bun test --timeout 30000`, the client's per-test budget (Bun's default is
+    5 s, and `bunfig.toml`'s test timeout is not applied);
+  - `scripts.check` is `bun run typecheck && bun run test && bun pm pack --dry-run`;
   - `scripts["check:pi"]` is `bun scripts/check-pi-compat.mjs`;
   - `packageManager` is `bun@1.4.4`;
   - `devDependencies` has no `vitest` and has `@types/bun` at exactly `1.4.4`.
@@ -162,11 +176,16 @@ Context.
   | `npm run <script>` | `bun run <script>` |
   | `npm audit --audit-level=high` | `bun audit --audit-level=high` |
   | `npm pack --dry-run` | `bun pm pack --dry-run` |
-  | `npx vitest run <paths>` | `bun test <paths>` |
+  | `npx vitest run <paths>` | `bun test --timeout 30000 <paths>` |
   | `node scripts/<name>.mjs` | `bun scripts/<name>.mjs` |
-  | `npm test` | `bun test` |
+  | `npm test` | `bun run test` |
+  | `npm install --prefix <dir> <pkg>` | `bun add --cwd <dir> <pkg>` |
 
-  `setup-sol-pi.fish`'s full-suite run keeps excluding `tests/package.test.ts`.
+  `setup-sol-pi.fish`'s full-suite run keeps excluding `tests/package.test.ts`
+  (`--path-ignore-patterns`). `examples/sol-pi-skill/tests/test_sol_pi_skill.py` runs the config
+  checker with `bun`.
+- `setup-sol-pi.fish` and `examples/sol-pi-skill/bin/sol-pi-run` check for Bun 1.4.4 or later as a
+  prerequisite, in place of npm, and stop with a message naming it when it is missing.
 - Installing Pi is documented with Bun first (`bun add --global
   @earendil-works/pi-coding-agent@<version>`), with the npm command kept as the alternative. The
   compatibility check is documented for both locations, `--pi-root "$HOME/.bun/install/global/node_modules"`
@@ -176,8 +195,6 @@ Context.
   `@types/node`) and the lockfile `bun.lock`.
 - `tests/install-guide.test.ts` requires the Bun commands in place of the npm ones, with the same
   coverage of the guide.
-- The `then_run` command used as test data in `tests/action-fusion.test.ts` and
-  `tests/evidence-preserving-reducer.test.ts` is `bun test`.
 - `CHANGELOG.md` `[Unreleased]` records the move to Bun and the removal of Vitest.
 
 ### §S7 — CI on the same Bun
@@ -190,13 +207,20 @@ Context.
 
 ## Acceptance criteria
 
-- [ ] **Fidelity** The bun client's `regression` runs exactly the 274 tests of the Context table,
-      with the per-file counts of that table, and reports **274 passed, 0 failed, 0 skipped**.
-- [ ] **Fidelity** Every test name in the run is unique, and each of the 274 Vitest reference
-      names appears in the run.
+**Matching tests across the two runners.** A test's identity is its file, its `describe` chain and
+its title (Vitest's JUnit `classname` is the file and `name` is `describe > title`; Bun's nests
+the `describe` chain as test suites). Titles generated by `it.each` match when they differ only in
+how the row value is printed: Vitest quotes strings (`'edit'`), shortens long values with `…`,
+and prints zero as `+0`; Bun does not.
+
+- [ ] **Fidelity** The bun client's `regression` reports **0 failed, 0 skipped**, and runs the 274
+      reference tests of the Context table, with that table's per-file counts, plus only the
+      `waitFor` tests in `tests/helpers.test.ts`.
+- [ ] **Fidelity** Every test identity in the run is unique, and each of the 274 Vitest reference
+      tests matches exactly one test in the run, by the rule above. A comparison of the two JUnit
+      reports, attached to the CR's close-out, shows the mapping.
 - [ ] **Fidelity** The run reports at least 3163 `expect()` calls.
-- [ ] **Fidelity** Every test-file hunk in the CR's diff belongs to §S1–§S4 or §S6's `then_run`
-      test data; no `it`, `test` or `describe` is removed, and no `.skip`, `.todo`, `.only` or
+- [ ] **Fidelity** Every test-file hunk in the CR's diff belongs to §S1–§S4; no `it`, `test` or `describe` is removed, and no `.skip`, `.todo`, `.only` or
       `skipIf` is added except §S2's symlink condition.
 - [ ] **§S1** `git grep -n 'from "vitest"' -- tests` returns nothing.
 - [ ] **§S2** `git grep -n -E 'vi\.waitFor|expect\.soft|ctx\.skip' -- tests` returns nothing.
@@ -205,17 +229,27 @@ Context.
       `{ timeout, interval }` overrides both.
 - [ ] **§S3** The codemode tests pass in two consecutive `regression` runs and when each codemode
       test file is run alone with the client's `test --tests`.
+- [ ] **§S3** The tests that start Pi in a child process start it with `node`; `git grep -n
+      process.execPath -- tests` returns no Pi or script launch.
 - [ ] **§S4** `tests/action-fusion.test.ts` passes from a checkout whose directory is named `SoL-Pi`.
 - [ ] **§S5** `package.json` has the scripts, `packageManager` and `devDependencies` §S5 lists,
       exactly.
 - [ ] **§S5** `package-lock.json` does not exist; `grep -c -i vitest bun.lock` is 0;
       `bun install --frozen-lockfile` succeeds on a clean checkout.
 - [ ] **§S5** The client's `check` exits 0 with `tsconfig.json` `types` exactly `["node", "bun"]`.
-- [ ] **§S5** `bunfig.toml` holds `env = false`, and a test run does not see
-      `CRUCIBLE_PROJECT_KEY` in `process.env` when `.env` defines it and the shell does not export it.
-- [ ] **§S6** `git grep -n -E '\bnpx\b|\bnpm (ci|run|test|audit|pack)\b|\bnode scripts/|vitest' -- . ':!docs/changes' ':!CHANGELOG.md'`
-      returns nothing.
-- [ ] **§S6** `bun run check` exits 0.
+- [ ] **§S5** `bunfig.toml` holds `env = false`; from the project root, with a `.env` defining
+      `CRUCIBLE_PROJECT_KEY` and the variable removed from the environment (`env -u
+      CRUCIBLE_PROJECT_KEY`), `bun -e 'console.log(process.env.CRUCIBLE_PROJECT_KEY ?? "unset")'`
+      prints `unset`.
+- [ ] **§S6** `git grep -n -E '\bnpx\b|\bnpm (ci|run|test|audit|pack|install)\b|\bnode scripts/|vitest' -- . ':!docs/changes' ':!CHANGELOG.md' ':!tests/action-fusion.test.ts' ':!tests/evidence-preserving-reducer.test.ts'`
+      returns nothing, apart from the npm alternative for installing Pi that §S6 keeps. The two
+      excluded files use `npm test` as a `then_run` command in their test data, which the
+      reducer's diagnostic-command rule matches.
+- [ ] **§S6** The parts of `bun run check` each pass: the client's `check` (typecheck), the
+      client's `regression`, and `bun pm pack --dry-run`. `scripts.test` itself is not run outside
+      the client.
+- [ ] **§S6** With Bun missing from `PATH`, `setup-sol-pi.fish` and `sol-pi-run setup` stop
+      before installing anything, naming Bun 1.4.4.
 - [ ] **§S6** `CHANGELOG.md` `[Unreleased]` has an entry for the move to Bun.
 - [ ] **§S6** `examples/sol-pi-skill/tests/test_sol_pi_skill.py` passes through the python
       client.
@@ -245,3 +279,5 @@ docs, scripts, examples and the setup script.
   behaviour (CR-SLP-004).
 - Pi 1.5.0 support (CR-SLP-002).
 - The runtime Pi uses to load SoL-Pi: SoL-Pi stays a Pi extension that Node and Bun both load.
+- The reducer recognising `bun test` as a diagnostic command (its own CR if wanted).
+- Running the suite in a random file order (the client has no order flag).
