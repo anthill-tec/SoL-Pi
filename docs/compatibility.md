@@ -11,11 +11,14 @@ SoL-Pi works with Pi codemode in both `codemode.mode: "on"` and `"only"` on Pi 1
 From a SoL-Pi source checkout, install the checkout's dependencies and check the Pi that will load the extension:
 
 ```bash
-npm ci --ignore-scripts
-node scripts/check-pi-compat.mjs --pi-root "$(npm root -g)/@earendil-works/pi-coding-agent"
+bun install --frozen-lockfile --ignore-scripts
+# Pi installed with Bun:
+bun scripts/check-pi-compat.mjs --pi-root "$HOME/.bun/install/global/node_modules"
+# Pi installed with npm:
+bun scripts/check-pi-compat.mjs --pi-root "$(npm root -g)"
 ```
 
-`--pi-root` accepts the `pi-coding-agent` package directory, a project that depends on it, or a global `node_modules` root. Without it, the script checks the checkout's development dependency; `npm run check:pi` runs that form. The script reports the Pi version, how its bash tool reports a non-zero exit, whether bash declares an output schema, and whether codemode is available. It fails when the version is below 0.84.2 or when a Pi export or method that SoL-Pi uses is missing. A version of at least 0.84.2 that is not in the tested set prints a warning and still passes; `--strict` turns warnings into failures. The script is not part of the npm package, so run it from a checkout. It uses the checkout's TypeScript to skip type-only imports; without `npm ci` it checks every imported name as a runtime value and prints a warning, so `--strict` fails even on a tested Pi.
+`--pi-root` accepts the `pi-coding-agent` package directory, a project that depends on it, or a global `node_modules` root. Without it, the script checks the checkout's development dependency; `bun run check:pi` runs that form. The script reports the Pi version, how its bash tool reports a non-zero exit, whether bash declares an output schema, and whether codemode is available. It fails when the version is below 0.84.2 or when a Pi export or method that SoL-Pi uses is missing. A version of at least 0.84.2 that is not in the tested set prints a warning and still passes; `--strict` turns warnings into failures. The script is not part of the npm package, so run it from a checkout. It uses the checkout's TypeScript to skip type-only imports; without `bun install` it checks every imported name as a runtime value and prints a warning, so `--strict` fails even on a tested Pi.
 
 ## Public API surface
 

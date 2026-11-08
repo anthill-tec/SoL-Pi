@@ -8,11 +8,7 @@ import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
-
-interface PackReport {
-	files: Array<{ path: string }>;
-}
+import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 
 interface PackageManifest {
 	peerDependencies: Record<string, string>;
@@ -47,17 +43,15 @@ function declaredFloor(range: string): string {
 	return match[0];
 }
 
+/** The package's file paths, from the `packed <size> <path>` lines `bun pm pack --dry-run` prints. */
 function packedFiles(): string[] {
-	const result = spawnSync("npm", ["pack", "--dry-run", "--json"], {
+	const result = spawnSync("bun", ["pm", "pack", "--dry-run"], {
 		cwd: process.cwd(),
 		encoding: "utf8",
 		timeout: 25_000,
-		// Windows resolves `npm` through npm.cmd, which Node only spawns through a shell.
-		shell: process.platform === "win32",
 	});
 	if (result.status !== 0) throw new Error(result.stderr || result.stdout);
-	const report = JSON.parse(result.stdout) as PackReport[];
-	return report[0]?.files.map((file) => file.path) ?? [];
+	return result.stdout.split(/\r?\n/u).flatMap((line) => /^packed \S+ (.+)$/u.exec(line)?.[1] ?? []);
 }
 
 describe("published package", () => {
@@ -90,7 +84,7 @@ describe("published package", () => {
 });
 
 function runScript(script: string, args: string[]): { status: number | null; output: string } {
-	const result = spawnSync(process.execPath, [script, ...args], { cwd: process.cwd(), encoding: "utf8" });
+	const result = spawnSync("node", [script, ...args], { cwd: process.cwd(), encoding: "utf8" });
 	return { status: result.status, output: `${result.stdout}${result.stderr}` };
 }
 
@@ -99,8 +93,8 @@ function checkPiCompat(...args: string[]): { status: number | null; output: stri
 }
 
 // Every check starts a Node process that loads Pi; on slow shared file systems that takes longer than
-// Vitest's 5 s default.
-describe("Pi compatibility check", { timeout: 30_000 }, () => {
+// Bun's 5 s default, so each test has a 30 s timeout.
+describe("Pi compatibility check", () => {
 	const baseline = checkPiCompat();
 	const detected = /^Pi: @earendil-works\/pi-coding-agent@(\S+) \((.+)\)$/m.exec(baseline.output);
 	const roots: string[] = [];
@@ -185,13 +179,13 @@ describe("Pi compatibility check", { timeout: 30_000 }, () => {
 		);
 		const explicit = checkPiCompat("--pi-root", realDir ?? "", "--strict");
 		expect(explicit.status, explicit.output).toBe(0);
-	});
+	}, 30_000);
 
 	it("fails below the supported Pi floor", () => {
 		const result = checkPiCompat("--pi-root", fakePi("0.80.0", "*"));
 		expect(result.status, result.output).toBe(1);
 		expect(result.output).toContain("Pi 0.80.0 is below the supported floor 0.84.2");
-	});
+	}, 30_000);
 
 	it("warns on untested Pi versions and fails them only under --strict", () => {
 		const root = fakePi("9.0.0", "*");
@@ -200,7 +194,7 @@ describe("Pi compatibility check", { timeout: 30_000 }, () => {
 		expect(relaxed.output).toContain("WARN: Pi 9.0.0 is not in the tested set");
 		const strict = checkPiCompat(`--pi-root=${root}`, "--strict");
 		expect(strict.status, strict.output).toBe(1);
-	});
+	}, 30_000);
 
 	it("warns when Pi's internal packages come from another release", () => {
 		// Pi before 1.3.0 depends on its internal packages with caret ranges, so a fresh install of
@@ -218,14 +212,14 @@ describe("Pi compatibility check", { timeout: 30_000 }, () => {
 		expect(relaxed.output).toContain(`WARN: Pi ${version} is installed with internal packages from other releases (pi-codemode 99.0.0)`);
 		const strict = checkPiCompat("--pi-root", root, "--strict");
 		expect(strict.status, strict.output).toBe(1);
-	});
+	}, 30_000);
 
 	it("fails when a Pi export SoL-Pi imports is missing", () => {
 		const result = checkPiCompat("--pi-root", fakePi("1.0.4", "{ VERSION, CONFIG_DIR_NAME }"));
 		expect(result.status, result.output).toBe(1);
 		expect(result.output).toContain("Missing public Pi API: @earendil-works/pi-coding-agent getAgentDir");
 		expect(result.output).toContain("Missing public Pi API: createBashToolDefinition");
-	});
+	}, 30_000);
 
 	it("checks only the Pi imports that survive TypeScript import elision", () => {
 		const typeOnly = [
@@ -243,7 +237,7 @@ describe("Pi compatibility check", { timeout: 30_000 }, () => {
 		expect(failing.status, failing.output).toBe(1);
 		expect(failing.output).toContain("Missing public Pi API: @earendil-works/pi-coding-agent notAPiExport");
 		expect(failing.output).not.toContain("ExtensionAPI");
-	});
+	}, 30_000);
 
 	it("reports the bash exit status line when bash throws on a non-zero exit", () => {
 		const legacyBash = [
@@ -254,7 +248,7 @@ describe("Pi compatibility check", { timeout: 30_000 }, () => {
 		const result = checkPiCompat("--pi-root", fakePi(realVersion(), "*", legacyBash), "--strict");
 		expect(result.status, result.output).toBe(0);
 		expect(result.output).toContain("bash non-zero exit: throws (Pi <= 0.98 behaviour): Command exited with code 3");
-	});
+	}, 30_000);
 
 	it("warns when the bash probe throws for a reason other than a non-zero exit", () => {
 		const brokenBash = [
@@ -270,7 +264,7 @@ describe("Pi compatibility check", { timeout: 30_000 }, () => {
 		expect(relaxed.output).toContain("WARN: bash probe threw for a reason other than a non-zero exit");
 		const strict = checkPiCompat("--pi-root", root, "--strict");
 		expect(strict.status, strict.output).toBe(1);
-	});
+	}, 30_000);
 
 	it("reports a Pi install that cannot be imported as a structured failure", () => {
 		const result = checkPiCompat("--pi-root", fakePi(realVersion(), "", 'throw new Error("broken install");'));
@@ -278,7 +272,7 @@ describe("Pi compatibility check", { timeout: 30_000 }, () => {
 		expect(result.output).toContain("ERROR: Cannot load @earendil-works/pi-coding-agent: broken install");
 		expect(result.output).toContain("Pi compatibility: FAIL");
 		expect(result.output).not.toMatch(/^\s+at /m);
-	});
+	}, 30_000);
 });
 
 describe("declared Pi compatibility", () => {
@@ -307,10 +301,11 @@ describe("declared Pi compatibility", () => {
 	});
 
 	it("keeps the lockfile root peers in step with the manifest", () => {
-		const lockfile = JSON.parse(readFileSync("package-lock.json", "utf8")) as {
-			packages: Record<string, Partial<PackageManifest>>;
+		// bun.lock is JSONC: it ends objects and arrays with trailing commas.
+		const lockfile = Bun.JSONC.parse(readFileSync("bun.lock", "utf8")) as {
+			workspaces: Record<string, Partial<PackageManifest>>;
 		};
-		const locked = piPackages.map((name) => lockfile.packages[""]?.peerDependencies?.[name]);
+		const locked = piPackages.map((name) => lockfile.workspaces[""]?.peerDependencies?.[name]);
 
 		expect(locked).toEqual(piPeerRanges());
 	});

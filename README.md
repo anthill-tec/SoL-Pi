@@ -67,12 +67,18 @@ Read our paper: [SoL-Pi: Recursively Scaling Auto-Research Loops for Efficient A
 ### Requirements
 
 - Node.js 22.19 or newer
-- npm
+- Bun 1.4.4 or newer
 - `@earendil-works/pi-coding-agent` 0.84.2 or newer; tested with 0.84.2, 1.0.4, and 1.3.0. Install 1.3.0: a fresh install of Pi 1.0.x or 1.1.0 now fails to start, because those releases do not pin their internal packages. Other versions are untested: `scripts/check-pi-compat.mjs` warns on them, and `--strict` fails.
 
 ### Install
 
-Install the latest tested Pi release:
+Install the latest tested Pi release with Bun:
+
+```bash
+bun add --global @earendil-works/pi-coding-agent@1.3.0
+```
+
+Or, with npm:
 
 ```bash
 npm install --global @earendil-works/pi-coding-agent@1.3.0
@@ -122,11 +128,17 @@ For the complete schema, see [Configuration](docs/configuration.md). Coding agen
 
 SoL-Pi is tested with Pi 0.84.2, 1.0.4, and 1.3.0. All four mechanisms work with Pi codemode in both `codemode.mode: "on"` and `"only"`. In `"only"` mode, the model reaches bash, edit, and write through codemode scripts, and Evidence-Preserving Reducer skips script calls, so it has no effect there. See [Codemode](docs/compatibility.md#codemode) for per-mechanism behavior.
 
-To check the Pi that will load SoL-Pi, install the checkout's dependencies, then run the check from the checkout; `--strict` also fails on an untested Pi version. Without `npm ci`, the check cannot load TypeScript, prints a warning, and fails under `--strict` even on a tested Pi:
+To check the Pi that will load SoL-Pi, install the checkout's dependencies, then run the check from the checkout; `--strict` also fails on an untested Pi version. Without `bun install`, the check cannot load TypeScript, prints a warning, and fails under `--strict` even on a tested Pi. For a Pi installed with Bun:
 
 ```bash
-npm ci --ignore-scripts
-node scripts/check-pi-compat.mjs --pi-root "$(npm root -g)/@earendil-works/pi-coding-agent"
+bun install --frozen-lockfile --ignore-scripts
+bun scripts/check-pi-compat.mjs --pi-root "$HOME/.bun/install/global/node_modules"
+```
+
+For a Pi installed with npm:
+
+```bash
+bun scripts/check-pi-compat.mjs --pi-root "$(npm root -g)"
 ```
 
 ## Storage and Security
@@ -161,13 +173,13 @@ Evidence-Preserving Reducer may send eligible diagnostic-log content to its conf
 Install from the lockfile and run the complete source checks:
 
 ```bash
-npm ci --ignore-scripts
-npm run check
-npm audit --audit-level=high
-npm run check:pi
+bun install --frozen-lockfile --ignore-scripts
+bun run check
+bun audit --audit-level=high
+bun run check:pi
 ```
 
-`npm run check` covers TypeScript, the complete test suite, and package inspection. `npm run check:pi` runs `scripts/check-pi-compat.mjs` against the development dependency; pass `-- --strict` to fail on warnings, or `-- --pi-root <dir>` to check another Pi installation. The development dependency set is pinned to Pi 1.3.0. To check another tested Pi version, install its four Pi packages over the development dependency (for 1.0.4 also `pi-codemode`, `pi-mcp` and `chord` at 1.0.4) and rerun the checks; runtime Pi packages remain peer dependencies so Pi owns their installation and upgrades.
+`bun run check` covers TypeScript, the complete test suite, and package inspection. `bun run check:pi` runs `scripts/check-pi-compat.mjs` against the development dependency; pass `-- --strict` to fail on warnings, or `-- --pi-root <dir>` to check another Pi installation. The development dependency set is pinned to Pi 1.3.0. To check another tested Pi version, install its four Pi packages over the development dependency (for 1.0.4 also `pi-codemode`, `pi-mcp` and `chord` at 1.0.4) and rerun the checks; runtime Pi packages remain peer dependencies so Pi owns their installation and upgrades.
 
 ## Project Status
 

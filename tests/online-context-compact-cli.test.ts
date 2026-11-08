@@ -10,7 +10,7 @@ import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { SessionManager } from "@earendil-works/pi-coding-agent";
 import { fauxAssistantMessage } from "@earendil-works/pi-ai/providers/faux";
-import { expect, it } from "vitest";
+import { expect, it } from "bun:test";
 import { piCliPath } from "./helpers.ts";
 import {
 	BOUNDARY_COMPACTION_INSTRUCTIONS,
@@ -83,7 +83,7 @@ export default function (pi) {
 `);
 
 		// Use the locally installed Pi CLI, not a global executable or SDK prompt().
-		const running = promisify(execFile)(process.execPath, [
+		const running = promisify(execFile)("node", [
 			piCliPath(), "--offline", "--approve", "--print", "--mode", "text",
 			"--no-extensions", "--no-skills", "--no-prompt-templates", "--no-themes", "--no-context-files",
 			"--extension", extensionPath,
@@ -98,14 +98,14 @@ export default function (pi) {
 		});
 		running.child.stdin?.end();
 		const { stdout, stderr } = await running;
-		expect.soft(stdout.trim()).toBe(finalReply);
-		expect.soft(stderr).not.toMatch(/error|failed/iu);
+		expect(stdout.trim()).toBe(finalReply);
+		expect(stderr).not.toMatch(/error|failed/iu);
 
 		// Reopen from disk only after process exit; the seed manager is stale.
 		const entries = SessionManager.open(sessionFile).getEntries();
 		const compactions = entries.filter((entry) => entry.type === "compaction");
-		expect.soft(compactions).toHaveLength(1);
-		expect.soft(compactions[0]).toMatchObject({
+		expect(compactions).toHaveLength(1);
+		expect(compactions[0]).toMatchObject({
 			summary,
 			fromHook: true,
 			details: { reason: "manual", customInstructions: BOUNDARY_COMPACTION_INSTRUCTIONS },
@@ -113,12 +113,12 @@ export default function (pi) {
 		const reminders = entries.filter((entry) =>
 			entry.type === "custom_message" && entry.customType === "sol-pi-online-context-compact",
 		);
-		expect.soft(reminders).toHaveLength(1);
-		expect.soft(reminders[0]).toMatchObject({ content: POST_COMPACTION_PLAN_REMINDER, display: false });
+		expect(reminders).toHaveLength(1);
+		expect(reminders[0]).toMatchObject({ content: POST_COMPACTION_PLAN_REMINDER, display: false });
 		const assistants = entries.flatMap((entry) =>
 			entry.type === "message" && entry.message.role === "assistant" ? [entry.message] : [],
 		);
-		expect.soft(assistants.at(-1)).toMatchObject({
+		expect(assistants.at(-1)).toMatchObject({
 			stopReason: "stop",
 			content: [{ type: "text", text: finalReply }],
 		});

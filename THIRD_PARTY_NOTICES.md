@@ -18,7 +18,7 @@ The four Pi packages are also tested at 1.0.4 and at 0.84.2, the supported floor
 
 ## Development-only dependencies
 
-`@types/node` (MIT), TypeScript (Apache-2.0), and Vitest (MIT) are used to type-check and test the repository. They are not included in the SoL-Pi npm tarball. Exact versions and transitive dependency metadata are recorded in `package-lock.json`.
+`@types/bun` (MIT), TypeScript (Apache-2.0), and `@types/node` (MIT) are used to type-check and test the repository with Bun. They are not included in the SoL-Pi npm tarball. Exact versions and transitive dependency metadata are recorded in `bun.lock`.
 
 ## Star history chart generation
 

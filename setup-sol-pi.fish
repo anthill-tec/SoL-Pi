@@ -14,7 +14,7 @@
 #   # Uninstall project-local from a specific repo:
 #     fish setup-sol-pi.fish --uninstall /path/to/your/project
 #
-# Prerequisites:  fish 3+, node >=22.19, Pi already installed locally
+# Prerequisites:  fish 3+, node >=22.19, Bun >=1.4.4, Pi already installed locally
 
 set -g tmpdir (mktemp -d)
 function on_exit --on-event fish_exit
@@ -189,8 +189,19 @@ string match -r '^v2[2-9].|^v3' "$node_ver" > /dev/null \
     || fail "Node.js >= 22.19 required (got $node_ver)"
 info "Node.js $node_ver ✓"
 
-set -l npm_ver (npm --version)
-info "npm $npm_ver ✓"
+command -q bun \
+    || fail "Bun 1.4.4 or newer is required (bun not found on PATH)"
+set -l bun_ver (bun --version)
+set -l bun_parts (string match -r '^(\d+)\.(\d+)\.(\d+)' -- "$bun_ver")
+if test (count $bun_parts) -ne 4
+    fail "Bun 1.4.4 or newer is required (cannot read version '$bun_ver')"
+end
+if test $bun_parts[2] -lt 1
+    or test $bun_parts[2] -eq 1 -a $bun_parts[3] -lt 4
+    or test $bun_parts[2] -eq 1 -a $bun_parts[3] -eq 4 -a $bun_parts[4] -lt 4
+    fail "Bun 1.4.4 or newer is required (got $bun_ver)"
+end
+info "Bun $bun_ver ✓"
 
 # ── resolve paths ─────────────────────────────────────────────────
 # The SoL-Pi checkout to install: always the current directory (this repo).
@@ -655,25 +666,25 @@ set repo_head (git rev-parse HEAD 2>/dev/null)
 info "HEAD: $repo_head"
 
 # Install deps and run all checks (agents-install.md)
-npm ci --ignore-scripts 2>/dev/null
+bun install --frozen-lockfile --ignore-scripts 2>/dev/null
 # Run typecheck + functional tests. Skip package.test.ts which validates
 # npm-packaged distribution contents (only meaningful post-publish).
-npm run typecheck >/dev/null 2>&1 && \
-    npx vitest run --exclude '**/package.test.ts' >/dev/null 2>&1
+bun run typecheck >/dev/null 2>&1 && \
+    bun test --timeout 30000 --path-ignore-patterns '**/package.test.ts' >/dev/null 2>&1
 if not test -d node_modules
-    fail "npm run check failed — SoL-Pi source is broken"
+    fail "bun run check failed — SoL-Pi source is broken"
 end
 info "TypeScript + tests pass ✓"
 
 # End-to-end integration test (agents-install.md: all-mechanisms.test.ts)
-npx vitest run tests/all-mechanisms.test.ts >/dev/null 2>&1 \
+bun test --timeout 30000 tests/all-mechanisms.test.ts >/dev/null 2>&1 \
     || fail "End-to-end integration test (all-mechanisms) failed"
 info "All-mechanisms integration test ✓"
 
 # Security audit (agents-install.md)
-npm audit --audit-level=high 2>&1 | grep -qE "found [0-9]+ vulnerabilities" \
-    && echo (set_color yellow) "  (npm audit findings present — review manually)" (set_color normal) \
-    || info "npm audit clean ✓"
+bun audit --audit-level=high 2>&1 | grep -qE "[0-9]+ vulnerabilities" \
+    && echo (set_color yellow) "  (bun audit findings present — review manually)" (set_color normal) \
+    || info "bun audit clean ✓"
 
 # ── Phase 1: detect local Pi installation ─────────────────────────
 banner "Phase 1 — Detect local Pi installation"
@@ -754,7 +765,7 @@ if test -z "$current_pi"
 end
 
 # Compatibility check against installed Pi (agents-install.md: --strict required)
-node scripts/check-pi-compat.mjs --strict --pi-root "$compat_pi_root" >/dev/null 2>&1 \
+bun scripts/check-pi-compat.mjs --strict --pi-root "$compat_pi_root" >/dev/null 2>&1 \
     || fail "SoL-Pi is incompatible with Pi $current_pi"
 info "Compat check passed ✓"
 
@@ -795,7 +806,7 @@ if test "$mode" = "user"
         end
     end
     if test "$all_on" = "true"
-        node scripts/check-sol-pi-config.mjs \
+        bun scripts/check-sol-pi-config.mjs \
             --config "$sol_pi_user_conf" \
             --require-all-enabled >/dev/null 2>&1 \
             || fail "User config validation failed (expected all on)"
@@ -820,7 +831,7 @@ else
     write_config_with_diff "$sol_pi_proj_conf" "$sol_pi_config_content"
 
     if test "$all_on" = "true"
-        node scripts/check-sol-pi-config.mjs \
+        bun scripts/check-sol-pi-config.mjs \
             --config "$sol_pi_proj_conf" \
             --require-all-enabled >/dev/null 2>&1 \
             || fail "Project config validation failed (expected all on)"
@@ -838,7 +849,7 @@ end
 banner "Phase 4 — Verify installation"
 
 info "Re-running compat check…"
-node scripts/check-pi-compat.mjs --strict --pi-root "$compat_pi_root" >/dev/null 2>&1 \
+bun scripts/check-pi-compat.mjs --strict --pi-root "$compat_pi_root" >/dev/null 2>&1 \
     && info "Compat check ✓" \
     || fail "Compat check failed on re-verify"
 
@@ -865,7 +876,7 @@ pi list --approve 2>/dev/null | grep -i 'sol-pi' \
     || echo (set_color yellow) "  (soL-Pi not listed — verify manual install if needed)" (set_color normal)
 
 # Re-run end-to-end integration test post-install (agents-install.md Phase 4)
-npx vitest run tests/all-mechanisms.test.ts >/dev/null 2>&1 \
+bun test --timeout 30000 tests/all-mechanisms.test.ts >/dev/null 2>&1 \
     && info "Post-install all-mechanisms integration test ✓" \
     || echo (set_color yellow) "  (integration test skipped — may require external models)" (set_color normal)
 
@@ -886,7 +897,7 @@ end
 echo "  SoL-Pi path : $sol_pi_root"
 echo "  SoL-Pi HEAD : $repo_head"
 echo "  Node        : $node_ver"
-echo "  npm         : $npm_ver"
+echo "  Bun         : $bun_ver"
 echo "  Pi version  : $pi_version_line ($current_pi)"
 if test "$mode" = "user"
     echo "  Config      : $sol_pi_user_conf"

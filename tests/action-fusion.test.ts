@@ -5,7 +5,7 @@
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "bun:test";
 import {
 	type BashOperations,
 	createBashToolDefinition,
@@ -207,8 +207,11 @@ describe("action fusion then_run", () => {
 			expect(succeeded.call).toContain("Money saved · 1 model round-trip avoided");
 			expect(succeeded.rendered).toContain("Money saved · 1 model round-trip avoided");
 			const failed = render(true);
-			expect(failed.call).not.toContain("SoL-Pi");
-			expect(failed.rendered).not.toContain("SoL-Pi");
+			// The banner itself, not the bare name: a rendered file link may contain the checkout's path.
+			expect(failed.call).not.toContain("⚡ SoL-Pi · Action Fusion");
+			expect(failed.call).not.toContain("Money saved · 1 model round-trip avoided");
+			expect(failed.rendered).not.toContain("⚡ SoL-Pi · Action Fusion");
+			expect(failed.rendered).not.toContain("Money saved · 1 model round-trip avoided");
 		}
 	});
 

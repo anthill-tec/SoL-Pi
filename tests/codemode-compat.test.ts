@@ -28,7 +28,7 @@ import {
 	type AgentSession,
 	type ExtensionFactory,
 } from "@earendil-works/pi-coding-agent";
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { loadSolPiConfig } from "../src/sol-pi/config.ts";
 import { THEN_RUN_FAILED, THEN_RUN_SUCCEEDED } from "../src/sol-pi/extensions/action-fusion/index.ts";
 import {
@@ -37,6 +37,7 @@ import {
 	REDUCER_RECEIPT_SCHEMA,
 } from "../src/sol-pi/extensions/evidence-preserving-reducer/index.ts";
 import { THRESHOLD_BYTES } from "../src/sol-pi/extensions/observation-pack/index.ts";
+import { settleWorkerExits, trackWorkerExits } from "./helpers.ts";
 import {
 	BOUNDARY_COMPACTION_INSTRUCTIONS,
 	POST_COMPACTION_PLAN_REMINDER,
@@ -444,6 +445,9 @@ function resultIn(entry: ProviderRequest, toolCallId: string): WireMessage | und
 }
 
 describe.skipIf(createCodemodeExtension === undefined)("SoL-Pi with Pi codemode (all mechanisms)", () => {
+	beforeEach(trackWorkerExits);
+	afterEach(settleWorkerExits);
+
 	for (const mode of ["on", "only"] as const) {
 		it(`runs all four mechanisms together in codemode "${mode}" mode`, async () => {
 			expect(DIAGNOSTIC_COMMAND.test(diagnosticCommand(0))).toBe(true);
@@ -580,7 +584,7 @@ describe.skipIf(createCodemodeExtension === undefined)("SoL-Pi with Pi codemode 
 					entry.messages.forEach((message, index) => {
 						if (message.role !== "system") return;
 						expect(withoutDeclarations(message)).toEqual(withoutDeclarations(stored[index]!));
-						expect(message).toEqual(last[index]);
+						expect(message).toEqual(last[index]!);
 					});
 				}
 			}

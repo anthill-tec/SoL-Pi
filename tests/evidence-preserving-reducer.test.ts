@@ -9,7 +9,7 @@ import { tmpdir } from "node:os";
 import { basename, isAbsolute, join, relative } from "node:path";
 import type { AssistantMessage, Context, Model } from "@earendil-works/pi-ai";
 import { createBashToolDefinition, SessionManager, type ExtensionContext, type ToolResultEvent } from "@earendil-works/pi-coding-agent";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "bun:test";
 import {
 	createEvidencePreservingReducerExtension,
 	DIAGNOSTIC_COMMAND,
@@ -431,8 +431,8 @@ describe("evidence-preserving reducer", () => {
 		});
 	});
 
-	it.each([false, true])(
-		"reduces fused command output while preserving the mutation confirmation (failed=%s)",
+	it.each([[false], [true]])(
+		"reduces fused command output while preserving the mutation confirmation (failed=%p)",
 		async (failed) => {
 			const root = await storeRoot();
 			const signal = failed ? "ERROR test target failed" : "PASS test target completed";

@@ -262,30 +262,44 @@ def is_other_sol_pi(package):
 
 # ---------------------------------------------------------------- setup / doctor
 
+MIN_BUN = (1, 4, 4)
+
+
+def bun_version():
+    """The installed Bun version as a tuple, or None when Bun is missing or unreadable."""
+    if shutil.which('bun') is None:
+        return None
+    r = sh(['bun', '--version'])
+    m = re.match(r'(\d+)\.(\d+)\.(\d+)', r.stdout.strip()) if r.returncode == 0 else None
+    return tuple(int(part) for part in m.groups()) if m else None
+
+
 def cmd_setup(args):
-    if shutil.which('node') is None or shutil.which('npm') is None:
-        die('Node.js 22.19+ and npm are required')
+    if shutil.which('node') is None:
+        die('Node.js 22.19+ is required')
+    found = bun_version()
+    if found is None or found < MIN_BUN:
+        die('Bun 1.4.4 or newer is required' + ('' if found is None else f' (found {".".join(map(str, found))})'))
     if PI_VERSION is None:
         die(f'cannot read the pinned Pi version from {SRC}/package.json (set SOL_PI_SRC to a SoL-Pi checkout)')
     if not PI_BIN.exists():
         print(f'Installing Pi {PI_VERSION} into {PI_PREFIX} ...', file=sys.stderr)
         PI_PREFIX.mkdir(parents=True, exist_ok=True)
-        r = sh(['npm', 'install', '--prefix', str(PI_PREFIX), '--ignore-scripts', '--no-audit', '--no-fund',
-                f'@earendil-works/pi-coding-agent@{PI_VERSION}'])
+        r = sh(['bun', 'add', '--cwd', str(PI_PREFIX), f'@earendil-works/pi-coding-agent@{PI_VERSION}'])
         if r.returncode:
-            die('npm install failed:\n' + r.stderr[-2000:])
+            die('bun add failed:\n' + r.stderr[-2000:])
     # Checks run in the SoL-Pi checkout itself (agents-install.md, phase 1). An
-    # existing node_modules is kept: `npm ci` would delete and reinstall it.
+    # existing node_modules is kept rather than reinstalled from the lockfile.
     if not (SRC / 'node_modules').exists():
-        r = sh(['npm', 'ci', '--ignore-scripts', '--no-audit', '--no-fund'], cwd=SRC)
+        r = sh(['bun', 'install', '--frozen-lockfile', '--ignore-scripts'], cwd=SRC)
         if r.returncode:
-            die('npm ci in SoL-Pi failed:\n' + r.stderr[-2000:])
+            die('bun install in SoL-Pi failed:\n' + r.stderr[-2000:])
     if not args.skip_tests:
-        print('Running SoL-Pi checks (npm run check) ...', file=sys.stderr)
-        r = sh(['npm', 'run', 'check'], cwd=SRC)
+        print('Running SoL-Pi checks (bun run check) ...', file=sys.stderr)
+        r = sh(['bun', 'run', 'check'], cwd=SRC)
         if r.returncode:
             die('SoL-Pi checks failed:\n' + (r.stdout + r.stderr)[-3000:])
-        for cmd in (['node', 'scripts/check-pi-compat.mjs'], ['npx', 'vitest', 'run', 'tests/all-mechanisms.test.ts']):
+        for cmd in (['bun', 'scripts/check-pi-compat.mjs'], ['bun', 'test', '--timeout', '30000', 'tests/all-mechanisms.test.ts']):
             r = sh(cmd, cwd=SRC)
             if r.returncode:
                 die(' '.join(cmd) + ' failed:\n' + (r.stdout + r.stderr)[-3000:])

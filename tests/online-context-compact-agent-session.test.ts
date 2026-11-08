@@ -21,7 +21,7 @@ import {
 	fauxToolCall,
 	type FauxResponseStep,
 } from "@earendil-works/pi-ai/providers/faux";
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import {
 	BOUNDARY_COMPACTION_INSTRUCTIONS,
 	COMPACTION_FAILED_RESUME_REMINDER,
@@ -29,6 +29,7 @@ import {
 	POST_COMPACTION_PLAN_REMINDER,
 } from "../src/sol-pi/extensions/online-context-compact/extension.ts";
 import { ONLINE_STATE_ENTRY } from "../src/sol-pi/extensions/online-context-compact/state.ts";
+import { settleWorkerExits, trackWorkerExits } from "./helpers.ts";
 
 const OPEN = [{ id: "build", goal: "build it", status: "in_progress" }] as const;
 const DONE = [{ id: "build", goal: "build it", status: "completed" }] as const;
@@ -488,6 +489,9 @@ describe("Online Context Compact with a real AgentSession", () => {
 });
 
 describe.skipIf(createCodemodeExtension === undefined)("Online Context Compact with Pi codemode", () => {
+	beforeEach(trackWorkerExits);
+	afterEach(settleWorkerExits);
+
 	for (const mode of ["on", "only"] as const) {
 		it(`keeps update_plan model-only and compacts at a direct boundary in codemode "${mode}" mode`, async () => {
 			const scriptAttempt = [

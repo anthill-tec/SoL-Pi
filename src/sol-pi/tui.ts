@@ -66,17 +66,46 @@ export function showSolPiSavings(
 	saving: string,
 ): void {
 	if (context.mode !== "tui") return;
+	const ui = context.ui;
 	const message = `⚡ SoL-Pi · ${mechanism}\nMoney saved · ${saving}`;
-	context.ui.notify(message, "info");
-	context.ui.setStatus(STATUS_KEY, `⚡ ${mechanism} · ${saving}`);
+	ui.notify(message, "info");
+	ui.setStatus(STATUS_KEY, `⚡ ${mechanism} · ${saving}`);
 
-	const previous = statusTimers.get(context.ui);
+	const previous = statusTimers.get(ui);
 	if (previous) clearTimeout(previous);
 	const timer = setTimeout(() => {
-		if (statusTimers.get(context.ui) !== timer) return;
-		statusTimers.delete(context.ui);
-		context.ui.setStatus(STATUS_KEY, undefined);
+		if (statusTimers.get(ui) !== timer) return;
+		statusTimers.delete(ui);
+		// Pi throws from `context.ui` itself, as well as from its methods, once the context is stale.
+		ignoreStaleContext(() => context.ui.setStatus(STATUS_KEY, undefined));
 	}, STATUS_DURATION_MS);
 	if (typeof timer === "object" && "unref" in timer) timer.unref();
-	statusTimers.set(context.ui, timer);
+	statusTimers.set(ui, timer);
+}
+
+/**
+ * Cancels the pending status clear `showSolPiSavings` armed for this context's UI. SoL-Pi calls it
+ * at `session_shutdown`, so the timer never fires on a session that is gone.
+ */
+export function clearSolPiSavingsTimer(context: ExtensionContext): void {
+	ignoreStaleContext(() => {
+		const ui = context.ui;
+		const timer = statusTimers.get(ui);
+		if (!timer) return;
+		clearTimeout(timer);
+		statusTimers.delete(ui);
+	});
+}
+
+/** The start of the error Pi throws from a context used after its session was replaced, reloaded or shut down. */
+const STALE_CONTEXT_MESSAGE = "This extension ctx is stale";
+
+/** Runs `action`; a stale-context error means the session is gone, so there is nothing to do. */
+function ignoreStaleContext(action: () => void): void {
+	try {
+		action();
+	} catch (error) {
+		if (error instanceof Error && error.message.startsWith(STALE_CONTEXT_MESSAGE)) return;
+		throw error;
+	}
 }

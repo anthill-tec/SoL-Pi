@@ -1,6 +1,6 @@
 # CR-SLP-001 — Move the project's tooling to Bun; remove Vitest
 
-**Status:** PENDING · Pre-review: ran — the gap analysis needed rulings from the user (the test runner, Bun tooling everywhere)
+**Status:** COMPLETED · Pre-review: ran — the gap analysis needed rulings from the user (the test runner, Bun tooling everywhere)
 **Type:** maintenance
 **Priority:** P0 — every later CR's RED/GREEN/VERIFY runs, the pre-merge gate and CI run `bun test`
 **Depends on:** none
@@ -131,6 +131,11 @@ Context.
   `process.execPath`, which is Bun under `bun test`.
 - Each of the four `it.each` tables passes its rows so that Bun formats `%s`, giving each test the
   title Vitest gives it (for example `… (failed=false)` and `… (failed=true)`).
+- **The savings status timer outlives its session.** `bun test` runs every file in one process,
+  so the 4-second timer `showSolPiSavings` (`src/sol-pi/tui.ts`) arms to clear its status fires
+  after a test's session is disposed, reads the stale `context.ui`, and Pi throws "This extension
+  ctx is stale after session replacement or reload" between tests, dropping the next file's tests.
+  The timer is cleared at `session_shutdown`, and a timer firing on a stale context does nothing.
 
 ### §S4 — Fix the machine-dependent tests
 
@@ -215,12 +220,13 @@ and prints zero as `+0`; Bun does not.
 
 - [ ] **Fidelity** The bun client's `regression` reports **0 failed, 0 skipped**, and runs the 274
       reference tests of the Context table, with that table's per-file counts, plus only the
-      `waitFor` tests in `tests/helpers.test.ts`.
+      `waitFor` tests in `tests/helpers.test.ts` and one savings-timer test in `tests/tui.test.ts`;
+      its output has no "Unhandled error between tests".
 - [ ] **Fidelity** Every test identity in the run is unique, and each of the 274 Vitest reference
       tests matches exactly one test in the run, by the rule above. A comparison of the two JUnit
       reports, attached to the CR's close-out, shows the mapping.
 - [ ] **Fidelity** The run reports at least 3163 `expect()` calls.
-- [ ] **Fidelity** Every test-file hunk in the CR's diff belongs to §S1–§S4; no `it`, `test` or `describe` is removed, and no `.skip`, `.todo`, `.only` or
+- [ ] **Fidelity** Every test-file hunk in the CR's diff belongs to §S1–§S4 or §S6; no `it`, `test` or `describe` is removed, and no `.skip`, `.todo`, `.only` or
       `skipIf` is added except §S2's symlink condition.
 - [ ] **§S1** `git grep -n 'from "vitest"' -- tests` returns nothing.
 - [ ] **§S2** `git grep -n -E 'vi\.waitFor|expect\.soft|ctx\.skip' -- tests` returns nothing.
@@ -229,6 +235,9 @@ and prints zero as `+0`; Bun does not.
       `{ timeout, interval }` overrides both.
 - [ ] **§S3** The codemode tests pass in two consecutive `regression` runs and when each codemode
       test file is run alone with the client's `test --tests`.
+- [ ] **§S3** `tests/tui.test.ts`: after `session_shutdown`, advancing fake timers past 4 seconds
+      makes no `ui.setStatus` call, and a timer firing on a `ui` whose `setStatus` throws the stale
+      context error throws nothing.
 - [ ] **§S3** The tests that start Pi in a child process start it with `node`; `git grep -n
       process.execPath -- tests` returns no Pi or script launch.
 - [ ] **§S4** `tests/action-fusion.test.ts` passes from a checkout whose directory is named `SoL-Pi`.
@@ -241,8 +250,11 @@ and prints zero as `+0`; Bun does not.
       `CRUCIBLE_PROJECT_KEY` and the variable removed from the environment (`env -u
       CRUCIBLE_PROJECT_KEY`), `bun -e 'console.log(process.env.CRUCIBLE_PROJECT_KEY ?? "unset")'`
       prints `unset`.
-- [ ] **§S6** `git grep -n -E '\bnpx\b|\bnpm (ci|run|test|audit|pack|install)\b|\bnode scripts/|vitest' -- . ':!docs/changes' ':!CHANGELOG.md' ':!tests/action-fusion.test.ts' ':!tests/evidence-preserving-reducer.test.ts'`
-      returns nothing, apart from the npm alternative for installing Pi that §S6 keeps. The two
+- [ ] **§S6** `git grep -n -E '\bnpx\b|\bnpm (ci|run|test|audit|pack|install)\b|\bnode scripts/|vitest' -- . ':!docs/changes' ':!CHANGELOG.md' ':!tests/action-fusion.test.ts' ':!tests/evidence-preserving-reducer.test.ts' ':!.github/workflows/star-history.yml' ':!tests/install-guide.test.ts'`
+      returns nothing, apart from the npm alternative for installing Pi that §S6 keeps. The
+      star-history workflow bootstraps the third-party renderer's own pnpm toolchain (a non-goal);
+      `tests/install-guide.test.ts` holds the forbidden-command pattern and the npm alternative as
+      test data. The two
       excluded files use `npm test` as a `then_run` command in their test data, which the
       reducer's diagnostic-command rule matches.
 - [ ] **§S6** The parts of `bun run check` each pass: the client's `check` (typecheck), the

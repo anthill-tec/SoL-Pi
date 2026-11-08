@@ -8,7 +8,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AssistantMessage, Context, Model } from "@earendil-works/pi-ai";
 import type { ExtensionContext, ToolResultEvent } from "@earendil-works/pi-coding-agent";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "bun:test";
 import { DEFAULT_CONFIG } from "../src/sol-pi/config.ts";
 import { REDUCER_RECEIPT_SCHEMA } from "../src/sol-pi/extensions/evidence-preserving-reducer/index.ts";
 import { createSolPiExtension, registerConfiguredFeatures } from "../src/sol-pi/index.ts";
@@ -92,7 +92,7 @@ describe("SoL-Pi entrypoint", () => {
 		const pi = new FakePi();
 		const loader = vi.fn(() => ({ ...DEFAULT_CONFIG, observationPack: true }));
 		createSolPiExtension(loader)(pi.asExtensionApi());
-		expect([...pi.handlers.keys()]).toEqual(["session_start"]);
+		expect([...pi.handlers.keys()]).toEqual(["session_start", "session_shutdown"]);
 
 		const ctx = fakeContext(pi.sessionManager);
 		await pi.emit("session_start", { type: "session_start" }, ctx);
@@ -100,7 +100,7 @@ describe("SoL-Pi entrypoint", () => {
 
 		expect(loader).toHaveBeenCalledOnce();
 		expect(pi.registeredTools.map((tool) => tool.name)).toEqual(["obs_recall"]);
-		expect([...pi.handlers.keys()].sort()).toEqual(["context", "session_start"]);
+		expect([...pi.handlers.keys()].sort()).toEqual(["context", "session_shutdown", "session_start"]);
 	});
 
 	it("passes the configured reducer provider/model route into EPR", async () => {

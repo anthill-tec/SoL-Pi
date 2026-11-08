@@ -33,36 +33,49 @@ From `sol_pi_root`, record the repository state without changing it:
 git status --short --branch
 git rev-parse HEAD
 node --version
-npm --version
+bun --version
 ```
 
-Require Node.js 22.19 or newer. Install from the lockfile and run the source checks:
+Require Node.js 22.19 or newer and Bun 1.4.4 or newer. Install from the lockfile and run the source checks:
 
 ```bash
-npm ci --ignore-scripts
-npm run check
-npm audit --audit-level=high
-node scripts/check-pi-compat.mjs --strict
-npx vitest run tests/all-mechanisms.test.ts
+bun install --frozen-lockfile --ignore-scripts
+bun run check
+bun audit --audit-level=high
+bun scripts/check-pi-compat.mjs --strict
+bun test --timeout 30000 tests/all-mechanisms.test.ts
 ```
 
-`npm run check` covers type checking, the complete test suite, and package inspection. These checks run against the checkout's development dependency, Pi 1.3.0. `tests/all-mechanisms.test.ts` confirms that one all-enabled configuration registers all four mechanisms against Pi's public extension API. The tests run without a model provider.
+`bun run check` covers type checking, the complete test suite, and package inspection. These checks run against the checkout's development dependency, Pi 1.3.0. `tests/all-mechanisms.test.ts` confirms that one all-enabled configuration registers all four mechanisms against Pi's public extension API. The tests run without a model provider.
 
-Stop if any command fails. Do not hide a failure with `|| true` or replace `npm ci` with an unlocked install.
+Stop if any command fails. Do not hide a failure with `|| true` or replace `bun install --frozen-lockfile` with an unlocked install.
 
 ## Phase 2: install Pi and SoL-Pi
 
 Install the tested Pi release without changing its source. Use `1.3.0` unless the user asked for `0.84.2`:
 
 ```bash
+bun add --global @earendil-works/pi-coding-agent@1.3.0
+pi --version
+```
+
+Alternatively, install it with npm:
+
+```bash
 npm install --global --ignore-scripts @earendil-works/pi-coding-agent@1.3.0
 pi --version
 ```
 
-Require `pi --version` to report the version you installed. From `sol_pi_root`, check that installed Pi against the APIs SoL-Pi uses:
+Require `pi --version` to report the version you installed. From `sol_pi_root`, check that installed Pi against the APIs SoL-Pi uses. For a Pi installed with Bun:
 
 ```bash
-node scripts/check-pi-compat.mjs --strict --pi-root "$(npm root -g)/@earendil-works/pi-coding-agent"
+bun scripts/check-pi-compat.mjs --strict --pi-root "$HOME/.bun/install/global/node_modules"
+```
+
+For a Pi installed with npm:
+
+```bash
+bun scripts/check-pi-compat.mjs --strict --pi-root "$(npm root -g)"
 ```
 
 Require exit status 0. The output must name the installed version; with `--strict`, an untested version fails.
@@ -120,7 +133,7 @@ SoL-Pi reads no dedicated environment variables. Evidence-Preserving Reducer use
 From `sol_pi_root`, validate the exact effective file:
 
 ```bash
-node scripts/check-sol-pi-config.mjs \
+bun scripts/check-sol-pi-config.mjs \
   --config /absolute/path/to/effective/sol-pi.json \
   --require-all-enabled
 ```
@@ -131,7 +144,7 @@ Require exit status 0 and retain its JSON output. The check applies SoL-Pi's def
 
 1. Run `pi list --approve` from `target_project` and confirm the expected SoL-Pi source and scope.
 2. Run `check-sol-pi-config.mjs --require-all-enabled` against the effective `sol-pi.json`, and re-run `check-pi-compat.mjs --strict --pi-root` against the installed Pi.
-3. Re-run `npx vitest run tests/all-mechanisms.test.ts` from `sol_pi_root`.
+3. Re-run `bun test --timeout 30000 tests/all-mechanisms.test.ts` from `sol_pi_root`.
 4. Start Pi with `--offline --approve`, send no prompt, confirm there is no extension load error, and exit.
 5. Confirm that upstream Pi was not patched and that the SoL-Pi checkout contains no vendored Pi monorepo source.
 
@@ -141,7 +154,7 @@ Report:
 
 - SoL-Pi absolute path, branch, and commit;
 - repository state before and after installation;
-- Node, npm, and Pi versions, and the `check-pi-compat.mjs` result for the installed Pi;
+- Node, Bun, and Pi versions, and the `check-pi-compat.mjs` result for the installed Pi;
 - install scope and the exact entry shown by `pi list`;
 - effective config path, four enabled flags, EPR reducer provider/model, and `cacheWriteReadRatio`, without secrets;
 - every validation command and result;
