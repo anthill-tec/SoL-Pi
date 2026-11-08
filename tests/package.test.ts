@@ -341,6 +341,19 @@ describe("Pi compatibility check", () => {
 		expect(strict.status, strict.output).toBe(1);
 	}, 30_000);
 
+	it("follows a dependency cycle between Pi's internal packages to an end and lists each package once", () => {
+		// pi-ai and pi-schema depend on each other.
+		const root = fakePiRelease("1.5.0", { "pi-schema": "1.4.0" });
+		const manifestPath = join(root, "node_modules", "@earendil-works", "pi-schema", "package.json");
+		const manifest = JSON.parse(readFileSync(manifestPath, "utf8")) as Record<string, unknown>;
+		writeFileSync(manifestPath, JSON.stringify({ ...manifest, dependencies: { "@earendil-works/pi-ai": "1.5.0" } }));
+		const relaxed = checkPiCompat("--pi-root", root);
+		expect(relaxed.status, relaxed.output).toBe(0);
+		expect(relaxed.output).toContain("WARN: Pi 1.5.0 is installed with internal packages from other releases (pi-schema 1.4.0)");
+		expect(relaxed.output.match(/^WARN:/gmu)).toHaveLength(1);
+		expect(relaxed.output).toMatch(/^Pi compatibility: OK \(with warnings\)$/mu);
+	}, 30_000);
+
 	it("fails when a Pi export SoL-Pi imports is missing", () => {
 		const result = checkPiCompat("--pi-root", fakePi("1.0.4", "{ VERSION, CONFIG_DIR_NAME }"));
 		expect(result.status, result.output).toBe(1);
