@@ -274,7 +274,7 @@ describe("Online Context Compact extension", () => {
 		expect(await pi.emitContext(messages, context)).toEqual(messages);
 	});
 
-	it.each([[0], [3]])("records real progress on the first plan update after compaction, following %s work requests", async (workRequests) => {
+	it.each([[0], [3]])("records real progress on the first plan update after compaction, following %p work requests", async (workRequests) => {
 		const manager = new FakeSessionManager();
 		const pi = new FakePi(manager);
 		appendOnlineState(pi.asExtensionApi(), {
@@ -396,7 +396,7 @@ describe("Online Context Compact extension", () => {
 		expect(compact).not.toHaveBeenCalled();
 	});
 
-	it.each([[false], [true]])("preserves existing debt during unrelated native compaction (fromExtension=%s)", async (fromExtension) => {
+	it.each([[false], [true]])("preserves existing debt during unrelated native compaction (fromExtension=%p)", async (fromExtension) => {
 		const manager = new FakeSessionManager();
 		const pi = new FakePi(manager);
 		appendOnlineState(pi.asExtensionApi(), {

@@ -432,7 +432,7 @@ describe("evidence-preserving reducer", () => {
 	});
 
 	it.each([[false], [true]])(
-		"reduces fused command output while preserving the mutation confirmation (failed=%s)",
+		"reduces fused command output while preserving the mutation confirmation (failed=%p)",
 		async (failed) => {
 			const root = await storeRoot();
 			const signal = failed ? "ERROR test target failed" : "PASS test target completed";

@@ -122,7 +122,7 @@ it.each([
 	}
 }, 30_000);
 
-it.each([[false], [true]])("starts and shuts down the offline RPC CLI without a prompt (all enabled: %s)", async (allEnabled) => {
+it.each([[false], [true]])("starts and shuts down the offline RPC CLI without a prompt (all enabled: %p)", async (allEnabled) => {
 	const cwd = await mkdtemp(join(tmpdir(), "sol-pi-rpc-startup-"));
 	try {
 		const agentDir = join(cwd, "agent");
