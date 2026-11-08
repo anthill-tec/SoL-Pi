@@ -10,6 +10,7 @@ import { loadActionFusionBashOptions } from "./shell-options.ts";
 import { registerEvidencePreservingReducer } from "./extensions/evidence-preserving-reducer/index.ts";
 import { registerObservationPack } from "./extensions/observation-pack/index.ts";
 import { registerOnlineContextCompact } from "./extensions/online-context-compact/index.ts";
+import { clearSolPiSavingsTimer } from "./tui.ts";
 
 export function registerConfiguredFeatures(
 	pi: ExtensionAPI,
@@ -42,6 +43,10 @@ export function createSolPiExtension(
 				? loadActionFusionBashOptions(ctx.cwd, ctx.isProjectTrusted())
 				: undefined;
 			registerConfiguredFeatures(pi, config, bashOptions);
+		});
+		// Whatever features are enabled, a savings status timer never outlives its session.
+		pi.on("session_shutdown", (_event, ctx) => {
+			clearSolPiSavingsTimer(ctx);
 		});
 	};
 }
