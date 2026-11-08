@@ -113,7 +113,7 @@ describe("action fusion then_run", () => {
 		expect(objectSchema(write).properties.then_run).toMatchObject({
 			type: "object",
 			description:
-				"Command to run next on this file after the write succeeds — e.g. run, build, start/restart, install, or check it; optional timeout in seconds. Skipped if the write fails; a non-zero exit is reported but keeps the write.",
+				"Command to run next on this file after the write succeeds — e.g. run, build, test, check, install, or restart a service; optional timeout in seconds. Skipped if the write fails; a non-zero exit is reported but keeps the write.",
 			properties: {
 				command: { type: "string" },
 				timeout: { type: "number" },
@@ -123,7 +123,7 @@ describe("action fusion then_run", () => {
 		expect(objectSchema(edit).properties.then_run).toMatchObject({
 			type: "object",
 			description:
-				"Command to run next on this file after the edit succeeds — e.g. run, build, start/restart, install, or check it; optional timeout in seconds. Skipped if the edit fails; a non-zero exit is reported but keeps the edit.",
+				"Command to run next on this file after the edit succeeds — e.g. run, build, test, check, install, or restart a service; optional timeout in seconds. Skipped if the edit fails; a non-zero exit is reported but keeps the edit.",
 			properties: {
 				command: { type: "string" },
 				timeout: { type: "number" },
