@@ -21,7 +21,7 @@
 ## D2 — One AXI command
 
 - `sol-pi-axi` is one console script with verbs: `setup <project dir>` (per project), `install` and
-  `uninstall` (user-wide), and a home view with no verb.
+  `uninstall` (user-wide), `verify` (read-only load check), and a home view with no verb.
 - It follows the AXI standard as `modelb-axi` and Crucible's clients do: one TOON envelope (root
   `axi`) on standard output, `--format json` for one JSON line, exit codes 0/1/2, every value
   settable by flag, unknown input rejected, next steps in `help[]`, a fast `--version`.
@@ -73,7 +73,8 @@
 ## D6 — The post-install check
 
 - `install` ends by starting Pi and failing when SoL-Pi does not load cleanly, carrying over the
-  fish script's smoke test.
+  fish script's smoke test. `sol-pi-axi verify` runs the same check read-only, for Model B's
+  `sol-pi-status` skill (CR-MDB-101), which never registers or installs SoL-Pi.
 - Measured (Pi 1.5.0 and 1.3.0, offline, temporary agent directories):
   `pi --offline --no-approve --mode rpc --no-session` loads every extension, runs `session_start`,
   answers a `get_state` command and exits 0 when its input closes, in about 0.25 s, with no model,
