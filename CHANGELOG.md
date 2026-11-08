@@ -9,7 +9,7 @@ All notable changes to this project are documented in this file. The format is b
 ### Added
 
 - `sol-pi-axi`, an installed agent-facing command (Python 3.14+, `uv tool install
-  git+https://github.com/anthill-tec/SoL-Pi@<version>`). `sol-pi-axi setup <project dir>` writes
+  sol-pi-axi==<version>`). `sol-pi-axi setup <project dir>` writes
   `<project dir>/.pi/sol-pi.json` from the project file, the agent directory's `sol-pi.json` or the
   setup defaults (all four mechanisms on, ratio 12.5, the reducer on Pi's default provider and
   model), overridden by `--features`, `--reducer` and `--cache-ratio`; it never prompts, writes
@@ -17,6 +17,13 @@ All notable changes to this project are documented in this file. The format is b
   (or one JSON line with `--format json`) with documented exit codes; with no verb it prints a
   home view. It reads `PI_CODING_AGENT_DIR`; the extension still reads no environment variables.
   Its one runtime dependency is `toon-format` 1.2.0 (MIT).
+- Registry distribution: SoL-Pi is published as two packages sharing one version, the
+  `sol-pi-axi` command on PyPI and the Pi extension `@anthill-tec/sol-pi` on npm.
+  `sol-pi-axi install` registers `npm:@anthill-tec/sol-pi@<version>` with Pi (Pi as `$PI_BIN` or
+  `pi` on `PATH`), replaces other SoL-Pi sources once that succeeds, and writes the agent directory's
+  `sol-pi.json` with the setup defaults when it has none; `sol-pi-axi uninstall` removes every
+  SoL-Pi source and deletes no configuration file. The home view shows the extension's
+  registration. The release workflow tests both stacks and publishes both packages.
 - Pi 1.5.0 support: Pi 1.5.0 joins the tested set (0.84.2, 1.0.4, 1.3.0, 1.5.0) as the latest
   tested release, the development dependency and the documented default install.
   `scripts/check-pi-compat.mjs --strict` passes on it, and its mixed-internal-packages warning now
