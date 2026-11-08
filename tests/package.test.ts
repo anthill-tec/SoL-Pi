@@ -322,6 +322,25 @@ describe("Pi compatibility check", () => {
 		expect(strict.output).toContain("Pi compatibility: FAIL");
 	}, 30_000);
 
+	it("warns on a nested copy of an internal package from another release beside a top-level copy of this release", () => {
+		// pi-agent-core resolves the top-level pi-schema 1.5.0, but pi-ai resolves its own nested
+		// pi-schema 1.4.0 first: both copies are installed, so the nested one is still checked.
+		const root = fakePiRelease("1.5.0");
+		const nested = join(root, "node_modules", "@earendil-works", "pi-ai", "node_modules", "@earendil-works", "pi-schema");
+		mkdirSync(nested, { recursive: true });
+		writeFileSync(join(nested, "index.js"), "export {};\n");
+		writeFileSync(
+			join(nested, "package.json"),
+			JSON.stringify({ name: "@earendil-works/pi-schema", version: "1.4.0", type: "module", exports: { ".": "./index.js" } }),
+		);
+		const relaxed = checkPiCompat("--pi-root", root);
+		expect(relaxed.status, relaxed.output).toBe(0);
+		expect(relaxed.output).toContain("WARN: Pi 1.5.0 is installed with internal packages from other releases (pi-schema 1.4.0)");
+		expect(relaxed.output.match(/^WARN:/gmu)).toHaveLength(1);
+		const strict = checkPiCompat("--pi-root", root, "--strict");
+		expect(strict.status, strict.output).toBe(1);
+	}, 30_000);
+
 	it("fails when a Pi export SoL-Pi imports is missing", () => {
 		const result = checkPiCompat("--pi-root", fakePi("1.0.4", "{ VERSION, CONFIG_DIR_NAME }"));
 		expect(result.status, result.output).toBe(1);

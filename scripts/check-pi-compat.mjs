@@ -42,7 +42,7 @@
  * 2 usage error.
  */
 
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync } from "node:fs";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -220,26 +220,30 @@ async function loadModule(piDir, specifier) {
  *
  * Follows every internal package reachable through Pi's internal dependencies (Pi 1.5.0 reaches
  * pi-schema and pi-telemetry only through pi-ai and pi-agent-core), resolving each from the package
- * that depends on it, and lists each package once.
+ * that depends on it. Each installed copy is visited once, by its real directory, so a nested copy
+ * is checked beside a top-level copy of the same package and a dependency cycle ends; each
+ * `name version` pair is listed once.
  */
 function mixedInternalPackages(piDir, version) {
-	const mixed = [];
-	const seen = new Set();
+	const mixed = new Set();
+	const visited = new Set([realpathSync(piDir)]);
 	const pending = [piDir];
 	while (pending.length > 0) {
 		const parentDir = pending.shift();
 		const dependencies = readJson(join(parentDir, "package.json")).dependencies ?? {};
 		for (const name of Object.keys(dependencies)) {
-			if (!name.startsWith("@earendil-works/pi-") || name === PI_CODING_AGENT || seen.has(name)) continue;
-			seen.add(name);
+			if (!name.startsWith("@earendil-works/pi-") || name === PI_CODING_AGENT) continue;
 			const dir = findPackageDir(name, parentDir);
 			if (!dir) continue;
+			const realDir = realpathSync(dir);
+			if (visited.has(realDir)) continue;
+			visited.add(realDir);
 			pending.push(dir);
 			const installed = readJson(join(dir, "package.json")).version;
-			if (installed && installed !== version) mixed.push(`${name.slice("@earendil-works/".length)} ${installed}`);
+			if (installed && installed !== version) mixed.add(`${name.slice("@earendil-works/".length)} ${installed}`);
 		}
 	}
-	return mixed;
+	return [...mixed];
 }
 
 async function checkPi() {
