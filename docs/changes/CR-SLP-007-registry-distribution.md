@@ -131,7 +131,8 @@ arguments and working directory and edits `settings.json` as `pi install` and `p
 - [ ] **§S1** `bun pm pack --dry-run` lists the same files as on the base branch.
 - [ ] **§S1** The packed tarball, unpacked and loaded by the development dependency's Pi with its
       path as the extension, registers SoL-Pi's tools.
-- [ ] **§S2** Empty agent directory: `install` runs `pi install npm:@anthill-tec/sol-pi@<own
+- [ ] **§S2** An agent directory with no SoL-Pi registration and no `sol-pi.json`, whose
+      `settings.json` names a Pi default provider and model: `install` runs `pi install npm:@anthill-tec/sol-pi@<own
       version>`, writes `sol-pi.json` with the setup defaults, exits 0, `installed`. A second run
       runs no `pi install` or `pi remove`, leaves the file's bytes and modification time, `unchanged`.
 - [ ] **§S2** Every recorded `pi` command ran from the home directory with `--no-approve`.
