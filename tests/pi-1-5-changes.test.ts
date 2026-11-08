@@ -33,7 +33,13 @@ const createCodemodeExtension = (piCodingAgent as unknown as Record<string, unkn
 	| ((options: { mode: "on" | "only" }) => ExtensionFactory)
 	| undefined;
 
-type ToolResultMessage = { toolCallId: string; toolName: string; isError: boolean; content: { type: string; text?: string }[] };
+type ToolResultMessage = {
+	toolCallId: string;
+	toolName: string;
+	isError: boolean;
+	content: { type: string; text?: string }[];
+	details?: unknown;
+};
 
 function textOf(message: ToolResultMessage | undefined): string {
 	return (message?.content ?? []).flatMap((block) => (block.type === "text" ? [block.text ?? ""] : [])).join("\n");
@@ -63,7 +69,15 @@ afterEach(async () => {
 });
 
 describe("Pi 1.5.0 tool argument validation and coercion (pi-schema)", () => {
-	it("coerces the arguments of SoL-Pi's tools before execute and rejects invalid ones with pi-schema's message", async () => {
+	type FauxToolCallArgs = Parameters<typeof fauxToolCall>[1];
+
+	/**
+	 * Runs one tool call from the model through a real Pi session with SoL-Pi loaded from this checkout
+	 * (Action Fusion and Online Context Compact on), so Pi 1.5.0 validates and coerces its arguments
+	 * with pi-schema before SoL-Pi's tool runs. Returns the session's working directory and the call's
+	 * tool result.
+	 */
+	async function runToolCall(name: string, args: FauxToolCallArgs, id: string): Promise<{ cwd: string; result: ToolResultMessage | undefined }> {
 		const cwd = await tempDir("sol-pi-pi-schema-");
 		const agentDir = join(cwd, "agent");
 		await mkdir(agentDir);
@@ -73,17 +87,8 @@ describe("Pi 1.5.0 tool argument validation and coercion (pi-schema)", () => {
 			JSON.stringify({ ...DEFAULT_CONFIG, actionFusion: true, onlineContextCompact: true }),
 		);
 		const faux = fauxProvider({ provider: "sol-pi-pi-schema", api: "sol-pi-pi-schema-api" });
-		const call = (name: string, args: Parameters<typeof fauxToolCall>[1], id: string) =>
-			fauxAssistantMessage(fauxToolCall(name, args, { id }), { stopReason: "toolUse" });
 		faux.setResponses([
-			// A numeric string for then_run.timeout: pi-schema coerces it to the number SoL-Pi passes to bash.
-			call("write", { path: "timed.txt", content: "timed\n", then_run: { command: "sleep 5", timeout: "1" } }, "timeout-string"),
-			// null for the optional then_run: pi-schema drops it, so the write runs unfused.
-			call("write", { path: "plain.txt", content: "plain\n", then_run: null }, "then-run-null"),
-			// A single step for the steps array: pi-schema wraps it into a one-step plan.
-			call("update_plan", { steps: { id: "ship", goal: "ship it", status: "in_progress" } }, "single-step"),
-			// A status outside the schema's literals is still rejected before update_plan runs.
-			call("update_plan", { steps: [{ id: "ship", goal: "ship it", status: "done" }] }, "bad-status"),
+			fauxAssistantMessage(fauxToolCall(name, args, { id }), { stopReason: "toolUse" }),
 			fauxAssistantMessage("validation checked"),
 		]);
 		const settingsManager = SettingsManager.inMemory(
@@ -119,36 +124,51 @@ describe("Pi 1.5.0 tool argument validation and coercion (pi-schema)", () => {
 			const errors: unknown[] = [];
 			await session.bindExtensions({ onError: (error) => errors.push(error) });
 			await session.prompt("check validation", { expandPromptTemplates: false });
-			const results = toolResults(session);
-
-			// The coerced timeout reached then_run: the command was cut off after one second.
-			const timed = results.get("timeout-string");
-			expect(timed?.isError).toBe(true);
-			expect(textOf(timed)).toContain(THEN_RUN_FAILED);
-			expect(textOf(timed)).toMatch(/timed out after 1 second/iu);
-			expect(textOf(timed)).not.toContain("Validation failed");
-			expect(await readFile(join(cwd, "timed.txt"), "utf8")).toBe("timed\n");
-
-			// then_run: null is an omitted then_run, so the write is a plain write.
-			const plain = results.get("then-run-null");
-			expect(plain?.isError).toBe(false);
-			for (const marker of [THEN_RUN_SUCCEEDED, THEN_RUN_FAILED, THEN_RUN_SKIPPED]) expect(textOf(plain)).not.toContain(marker);
-			expect(await readFile(join(cwd, "plain.txt"), "utf8")).toBe("plain\n");
-
-			// A single step is recorded as a one-step plan.
-			expect(results.get("single-step")?.isError).toBe(false);
-
-			// An invalid status never reaches update_plan; the model sees pi-schema's message.
-			const bad = results.get("bad-status");
-			expect(bad?.isError).toBe(true);
-			expect(textOf(bad)).toContain('Validation failed for tool "update_plan"');
-			expect(textOf(bad)).toMatch(/^ {2}- steps\.0\.status: /mu);
-
 			expect(session.getLastAssistantText()).toBe("validation checked");
 			expect(errors).toEqual([]);
+			return { cwd, result: toolResults(session).get(id) };
 		} finally {
 			session?.dispose();
 		}
+	}
+
+	it("coerces a numeric-string then_run.timeout to the number of seconds SoL-Pi's then_run waits", async () => {
+		const { cwd, result } = await runToolCall(
+			"write",
+			{ path: "timed.txt", content: "timed\n", then_run: { command: "sleep 5", timeout: "1" } },
+			"timeout-string",
+		);
+		// The coerced timeout reached then_run: the command was cut off after one second.
+		expect(result?.isError).toBe(true);
+		expect(textOf(result)).toContain(THEN_RUN_FAILED);
+		expect(textOf(result)).toMatch(/timed out after 1 second/iu);
+		expect(textOf(result)).not.toContain("Validation failed");
+		expect(await readFile(join(cwd, "timed.txt"), "utf8")).toBe("timed\n");
+	}, 30_000);
+
+	it("treats then_run: null as an omitted then_run, so the write is a plain write", async () => {
+		const { cwd, result } = await runToolCall("write", { path: "plain.txt", content: "plain\n", then_run: null }, "then-run-null");
+		expect(result?.isError, textOf(result)).toBe(false);
+		for (const marker of [THEN_RUN_SUCCEEDED, THEN_RUN_FAILED, THEN_RUN_SKIPPED]) expect(textOf(result)).not.toContain(marker);
+		expect(await readFile(join(cwd, "plain.txt"), "utf8")).toBe("plain\n");
+	}, 30_000);
+
+	it("records a single update_plan step as a one-step plan", async () => {
+		const { result } = await runToolCall("update_plan", { steps: { id: "ship", goal: "ship it", status: "in_progress" } }, "single-step");
+		expect(result?.isError, textOf(result)).toBe(false);
+		// pi-schema wrapped the step into a one-item array, and update_plan recorded exactly that plan.
+		const plan = [{ id: "ship", goal: "ship it", status: "in_progress" }];
+		expect((result?.details as { plan?: unknown } | undefined)?.plan).toEqual(plan);
+		expect(textOf(result)).toContain(`<sol-pi-plan task_status="active">${JSON.stringify({ steps: plan })}</sol-pi-plan>`);
+	}, 30_000);
+
+	it("rejects an update_plan step status outside the schema with pi-schema's message before update_plan runs", async () => {
+		const { result } = await runToolCall("update_plan", { steps: [{ id: "ship", goal: "ship it", status: "done" }] }, "bad-status");
+		// Coercion cannot repair an unknown status, so the model sees pi-schema's message.
+		expect(result?.isError).toBe(true);
+		expect(textOf(result)).toContain('Validation failed for tool "update_plan"');
+		expect(textOf(result)).toMatch(/^ {2}- steps\.0\.status: /mu);
+		expect(textOf(result)).not.toContain("<sol-pi-plan");
 	}, 30_000);
 });
 
