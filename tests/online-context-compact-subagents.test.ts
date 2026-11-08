@@ -301,9 +301,8 @@ function expectDeferredStep(run: ScenarioRun, finalReply: string): void {
 	expect(reminders(run.sessionManager, POST_COMPACTION_PLAN_REMINDER)).toBe(0);
 	const deferred = deferredEntries(run.sessionManager);
 	expect(deferred).toHaveLength(1);
-	expect(deferred[0]).toMatchObject({ reason: "subagents-running" });
-	// The completed plan step's id, not the update_plan tool call id.
-	expect(Object.values(deferred[0]!)).toContain("build");
+	// Exactly the completed plan step's id (not the update_plan tool call id) and the reason.
+	expect(deferred[0]).toEqual({ stepId: "build", reason: "subagents-running" });
 	expect(run.faux.state.callCount).toBe(3);
 	expect(run.session.getLastAssistantText()).toBe(finalReply);
 	expect(run.settledCount()).toBe(1);

@@ -17,3 +17,11 @@ All notable changes to this project are documented in this file. The format is b
 ### Removed
 
 - Vitest: the tests run on Bun's own test runner (`bun:test`).
+
+### Fixed
+
+- Online Context Compact no longer stops the run for a boundary compaction while
+  `@gotgenes/pi-subagents` agents are running or queued: pi-subagents treated the stop as the
+  user's ESC and stopped every background sub-agent. The compaction is deferred to the next
+  completed step, recorded as a `sol-pi-online-context-compact-deferred` entry and, in the TUI,
+  shown as an info notice.
