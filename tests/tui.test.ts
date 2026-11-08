@@ -104,6 +104,10 @@ describe("SoL-Pi TUI savings presentation", () => {
 		expect(staleSetStatus).toHaveBeenCalledWith("sol-pi-savings", "⚡ Action Fusion · 1 model round-trip avoided");
 		stale = true;
 		expect(() => vi.advanceTimersByTime(4_100)).not.toThrow();
+		// The timer fired: it called the stale context's setStatus, which threw, and the error was swallowed.
+		expect(staleSetStatus).toHaveBeenCalledTimes(2);
+		expect(staleSetStatus).toHaveBeenLastCalledWith("sol-pi-savings", undefined);
+		expect(staleSetStatus.mock.results[1]?.type).toBe("throw");
 	});
 
 	it("recognizes calls a tool made through ctx.executeTool by their <parent>/<n> id", () => {
