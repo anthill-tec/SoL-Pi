@@ -54,8 +54,8 @@ sub-agent probe.
   immediately before `selected` is set and `context.abort()` is called. A step whose economics do
   not compact is unaffected and records nothing.
 - **Deferral.** While the probe says running, the compaction is not selected and the turn is not
-  aborted. OCC appends a session entry `sol-pi-online-context-compact-deferred` with the step id and
-  the reason `subagents-running`. In `tui` mode it calls `ui.notify` once with "Online compaction
+  aborted. OCC appends a session entry `sol-pi-online-context-compact-deferred` with data
+  `{ stepId, reason }`: the completed plan step's id and `"subagents-running"`. In `tui` mode it calls `ui.notify` once with "Online compaction
   deferred: sub-agents are running" at level `info`; other modes show nothing. The economic state
   is left as after a decision not to compact, so the next safe point decides afresh.
 - **Next safe point.** The next completed step re-runs the economic decision. SoL-Pi does not
@@ -80,8 +80,8 @@ in the slot, and clear the slot afterwards.
 
 - [ ] **§S1** With a fake service whose `hasRunning()` is true, an `update_plan` step completion
       whose economics would compact does not abort the turn (no `aborted` stop), does not compact,
-      and appends one `sol-pi-online-context-compact-deferred` entry with the step id and reason
-      `subagents-running`.
+      and appends one `sol-pi-online-context-compact-deferred` entry whose data is exactly
+      `{ stepId: <the completed step's id>, reason: "subagents-running" }`.
 - [ ] **§S1** A pi-subagents-style listener on the run's abort signal, attached at `turn_start`, is
       not fired by that step completion; a user abort (`session.abort()`) during a later run still
       fires it.
