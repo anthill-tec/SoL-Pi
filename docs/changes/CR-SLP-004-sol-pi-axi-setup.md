@@ -28,7 +28,7 @@ checkout's validation, registers SoL-Pi user-wide with `pi install`, leaves a `.
 - Dynamic version from `sol_pi_axi/_version.py` (`__version__ = "X.Y.Z"`, no imports), equal to
   `package.json` `version`.
 - The wheel holds only `sol_pi_axi/` and metadata; the sdist only `pyproject.toml`, `README.md`,
-  `LICENSE`, `sol_pi_axi/`.
+  `LICENSE`, `sol_pi_axi/`, plus the `PKG-INFO` and `.gitignore` hatchling always adds.
 - Python tests are `tests/test_*.py`; `tests/__init__.py` makes `tests` a package. They import the
   package from an editable install in `.venv` (Python 3.14, `uv pip install -e '.[dev]'`).
 - `.gitignore` adds `.venv/` and `*.egg-info/`.
