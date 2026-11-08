@@ -1,6 +1,6 @@
 # CR-SLP-002 — Support Pi 1.5.0; clear the `undici` advisories
 
-**Status:** PENDING · Pre-review: ran — touches another project's surface (Model B's setup step runs the strict Pi compatibility check, #1516 item 5)
+**Status:** COMPLETED · Pre-review: ran — touches another project's surface (Model B's setup step runs the strict Pi compatibility check, #1516 item 5)
 **Type:** maintenance
 **Priority:** P1 — Model B projects on Pi 1.5.0 cannot finish SoL-Pi's setup
 **Depends on:** CR-SLP-001

@@ -1,1 +1,7 @@
 env = false
+
+[test]
+# Count only this project's files. Some tests copy SoL-Pi into temporary
+# directories and load it there; Bun reports such files by a path relative to
+# the project root, so everything outside the root begins with "../".
+coveragePathIgnorePatterns = ["../**"]

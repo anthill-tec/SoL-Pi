@@ -148,6 +148,87 @@ describe("Pi compatibility check", () => {
 		return root;
 	}
 
+	/**
+	 * Pi 1.5.0's internal package graph: each package's exact `@earendil-works/pi-*` dependencies.
+	 * pi-schema and pi-telemetry are reached only through pi-ai and pi-agent-core.
+	 */
+	const PI_1_5_0_INTERNALS: Record<string, string[]> = {
+		"pi-agent-core": ["pi-ai", "pi-schema"],
+		"pi-ai": ["pi-schema", "pi-telemetry"],
+		"pi-codemode": [],
+		"pi-mcp": [],
+		"pi-schema": [],
+		"pi-telemetry": [],
+		"pi-tui": [],
+	};
+	const PI_1_5_0_DIRECT = ["pi-agent-core", "pi-ai", "pi-codemode", "pi-mcp", "pi-tui"];
+
+	/** The file a real Pi sibling package exports at `subpath` (the conditions Pi packages use). */
+	function realEntry(sibling: string, subpath: string): string {
+		const dir = join(dirname(realPiDir()), sibling);
+		const manifest = JSON.parse(readFileSync(join(dir, "package.json"), "utf8")) as {
+			main?: string;
+			exports?: Record<string, { import?: string } | string>;
+		};
+		const target = manifest.exports?.[subpath];
+		const file = typeof target === "string" ? target : (target?.import ?? (subpath === "." ? manifest.main : undefined));
+		if (!file) throw new Error(`${sibling} does not export ${subpath}`);
+		return pathToFileURL(join(dir, file)).href;
+	}
+
+	/**
+	 * A complete Pi `version` install shaped like Pi 1.5.0: pi-coding-agent exports its own `VERSION`
+	 * (not the development dependency's) and re-exports every other name from the real one, and every
+	 * internal package of Pi 1.5.0's graph is installed at `version` unless `installed` names another
+	 * version for it. pi-ai and pi-tui re-export the real packages, so the API checks still load them.
+	 */
+	function fakePiRelease(version: string, installed: Record<string, string> = {}): string {
+		const root = tempRoot();
+		const scope = join(root, "node_modules", "@earendil-works");
+		const pin = (names: string[]) =>
+			Object.fromEntries(names.map((name) => [`@earendil-works/${name}`, version]));
+		const reexports: Record<string, Record<string, string>> = {
+			"pi-ai": { ".": realEntry("pi-ai", "."), "./compat": realEntry("pi-ai", "./compat") },
+			"pi-tui": { ".": realEntry("pi-tui", ".") },
+		};
+		for (const [name, dependencies] of Object.entries(PI_1_5_0_INTERNALS)) {
+			const dir = join(scope, name);
+			mkdirSync(dir, { recursive: true });
+			const entries = reexports[name] ?? { ".": "" };
+			const exports: Record<string, string> = {};
+			for (const [subpath, real] of Object.entries(entries)) {
+				const file = `./${subpath === "." ? "index" : subpath.slice(2)}.js`;
+				exports[subpath] = file;
+				writeFileSync(join(dir, file), real ? `export * from ${JSON.stringify(real)};\n` : "export {};\n");
+			}
+			const manifest = {
+				name: `@earendil-works/${name}`,
+				version: installed[name] ?? version,
+				type: "module",
+				exports,
+				dependencies: pin(dependencies),
+			};
+			writeFileSync(join(dir, "package.json"), JSON.stringify(manifest));
+		}
+		const piDir = join(scope, "pi-coding-agent");
+		mkdirSync(join(piDir, "dist"), { recursive: true });
+		const manifest = {
+			name: "@earendil-works/pi-coding-agent",
+			version,
+			type: "module",
+			exports: { ".": { import: "./dist/index.js" } },
+			dependencies: pin(PI_1_5_0_DIRECT),
+		};
+		writeFileSync(join(piDir, "package.json"), JSON.stringify(manifest));
+		// A local export takes precedence over the star re-export, so VERSION is the fake's own.
+		const realIndex = pathToFileURL(join(realPiDir(), "dist", "index.js")).href;
+		writeFileSync(
+			join(piDir, "dist", "index.js"),
+			`export * from ${JSON.stringify(realIndex)};\nexport const VERSION = ${JSON.stringify(version)};\n`,
+		);
+		return root;
+	}
+
 	/** A SoL-Pi checkout with only the compat script, the given src/ files, and the real node_modules. */
 	function fakeCheckout(sources: Record<string, string>): string {
 		const root = tempRoot();
@@ -210,8 +291,67 @@ describe("Pi compatibility check", () => {
 		const relaxed = checkPiCompat("--pi-root", root);
 		expect(relaxed.status, relaxed.output).toBe(0);
 		expect(relaxed.output).toContain(`WARN: Pi ${version} is installed with internal packages from other releases (pi-codemode 99.0.0)`);
+		// The warning advises the latest tested release, Pi 1.5.0 (CR-SLP-002 §S2).
+		expect(relaxed.output).toContain("install Pi 1.5.0");
+		expect(relaxed.output).not.toContain("install Pi 1.3.0");
 		const strict = checkPiCompat("--pi-root", root, "--strict");
 		expect(strict.status, strict.output).toBe(1);
+	}, 30_000);
+
+	it("passes a Pi 1.5.0 install with its own VERSION and 1.5.0 internals under --strict without a warning", () => {
+		const root = fakePiRelease("1.5.0");
+		const result = checkPiCompat("--pi-root", root, "--strict");
+		expect(result.output).toMatch(/^Pi: @earendil-works\/pi-coding-agent@1\.5\.0 \(.+sol-pi-compat-.+\)$/mu);
+		expect(result.output).not.toContain("WARN:");
+		expect(result.output).not.toContain("ERROR:");
+		expect(result.output).toMatch(/^Pi compatibility: OK$/mu);
+		expect(result.status, result.output).toBe(0);
+	}, 30_000);
+
+	it("warns when an internal package Pi reaches only indirectly comes from another release", () => {
+		// pi-schema is not a direct dependency of pi-coding-agent 1.5.0; it arrives through pi-ai and
+		// pi-agent-core, so a check of the direct dependencies alone misses it.
+		const root = fakePiRelease("1.5.0", { "pi-schema": "1.4.0" });
+		const relaxed = checkPiCompat("--pi-root", root);
+		expect(relaxed.status, relaxed.output).toBe(0);
+		// Listed once, though two internal packages reach it, and no direct package is listed.
+		expect(relaxed.output).toContain("WARN: Pi 1.5.0 is installed with internal packages from other releases (pi-schema 1.4.0)");
+		expect(relaxed.output.match(/^WARN:/gmu)).toHaveLength(1);
+		const strict = checkPiCompat("--pi-root", root, "--strict");
+		expect(strict.status, strict.output).toBe(1);
+		expect(strict.output).toContain("Pi compatibility: FAIL");
+	}, 30_000);
+
+	it("warns on a nested copy of an internal package from another release beside a top-level copy of this release", () => {
+		// pi-agent-core resolves the top-level pi-schema 1.5.0, but pi-ai resolves its own nested
+		// pi-schema 1.4.0 first: both copies are installed, so the nested one is still checked.
+		const root = fakePiRelease("1.5.0");
+		const nested = join(root, "node_modules", "@earendil-works", "pi-ai", "node_modules", "@earendil-works", "pi-schema");
+		mkdirSync(nested, { recursive: true });
+		writeFileSync(join(nested, "index.js"), "export {};\n");
+		writeFileSync(
+			join(nested, "package.json"),
+			JSON.stringify({ name: "@earendil-works/pi-schema", version: "1.4.0", type: "module", exports: { ".": "./index.js" } }),
+		);
+		const relaxed = checkPiCompat("--pi-root", root);
+		expect(relaxed.status, relaxed.output).toBe(0);
+		expect(relaxed.output).toContain("WARN: Pi 1.5.0 is installed with internal packages from other releases (pi-schema 1.4.0)");
+		expect(relaxed.output.match(/^WARN:/gmu)).toHaveLength(1);
+		const strict = checkPiCompat("--pi-root", root, "--strict");
+		expect(strict.status, strict.output).toBe(1);
+	}, 30_000);
+
+	it("follows a dependency cycle between Pi's internal packages to an end and lists each package once", () => {
+		// pi-ai and pi-schema depend on each other.
+		const root = fakePiRelease("1.5.0", { "pi-schema": "1.4.0" });
+		const manifestPath = join(root, "node_modules", "@earendil-works", "pi-schema", "package.json");
+		const manifest = JSON.parse(readFileSync(manifestPath, "utf8")) as Record<string, unknown>;
+		writeFileSync(manifestPath, JSON.stringify({ ...manifest, dependencies: { "@earendil-works/pi-ai": "1.5.0" } }));
+		const relaxed = checkPiCompat("--pi-root", root);
+		expect(relaxed.status, relaxed.output).toBe(0);
+		expect(relaxed.output).toContain("WARN: Pi 1.5.0 is installed with internal packages from other releases (pi-schema 1.4.0)");
+		expect(relaxed.output.match(/^WARN:/gmu)).toHaveLength(1);
+		expect(relaxed.output).toMatch(/^Pi compatibility: OK \(with warnings\)$/mu);
 	}, 30_000);
 
 	it("fails when a Pi export SoL-Pi imports is missing", () => {

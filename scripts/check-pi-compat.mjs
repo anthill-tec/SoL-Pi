@@ -42,14 +42,15 @@
  * 2 usage error.
  */
 
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync } from "node:fs";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const PI_FLOOR = "0.84.2";
-const TESTED_PI_VERSIONS = ["0.84.2", "1.0.4", "1.3.0"];
+const TESTED_PI_VERSIONS = ["0.84.2", "1.0.4", "1.3.0", "1.5.0"];
+const LATEST_TESTED_PI = TESTED_PI_VERSIONS.at(-1);
 const PI_CODING_AGENT = "@earendil-works/pi-coding-agent";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -216,16 +217,33 @@ async function loadModule(piDir, specifier) {
  * Pi's own `@earendil-works/pi-*` dependencies whose installed version differs from pi-coding-agent's.
  * Releases before Pi 1.3.0 declare them with caret ranges, so a fresh install now pulls the newest
  * internals; Pi 1.0.x and 1.1.0 then fail to load. Pi 1.3.0 pins them exactly.
+ *
+ * Follows every internal package reachable through Pi's internal dependencies (Pi 1.5.0 reaches
+ * pi-schema and pi-telemetry only through pi-ai and pi-agent-core), resolving each from the package
+ * that depends on it. Each installed copy is visited once, by its real directory, so a nested copy
+ * is checked beside a top-level copy of the same package and a dependency cycle ends; each
+ * `name version` pair is listed once.
  */
 function mixedInternalPackages(piDir, version) {
-	const dependencies = readJson(join(piDir, "package.json")).dependencies ?? {};
-	return Object.keys(dependencies)
-		.filter((name) => name.startsWith("@earendil-works/pi-"))
-		.flatMap((name) => {
-			const dir = findPackageDir(name, piDir);
-			const installed = dir ? readJson(join(dir, "package.json")).version : undefined;
-			return installed && installed !== version ? [`${name.slice("@earendil-works/".length)} ${installed}`] : [];
-		});
+	const mixed = new Set();
+	const visited = new Set([realpathSync(piDir)]);
+	const pending = [piDir];
+	while (pending.length > 0) {
+		const parentDir = pending.shift();
+		const dependencies = readJson(join(parentDir, "package.json")).dependencies ?? {};
+		for (const name of Object.keys(dependencies)) {
+			if (!name.startsWith("@earendil-works/pi-") || name === PI_CODING_AGENT) continue;
+			const dir = findPackageDir(name, parentDir);
+			if (!dir) continue;
+			const realDir = realpathSync(dir);
+			if (visited.has(realDir)) continue;
+			visited.add(realDir);
+			pending.push(dir);
+			const installed = readJson(join(dir, "package.json")).version;
+			if (installed && installed !== version) mixed.add(`${name.slice("@earendil-works/".length)} ${installed}`);
+		}
+	}
+	return [...mixed];
 }
 
 async function checkPi() {
@@ -247,7 +265,7 @@ async function checkPi() {
 		warnings.push(
 			`Pi ${version} is installed with internal packages from other releases (${mixed.join(", ")}). ` +
 				`Pi releases before 1.3.0 do not pin them, so a fresh install mixes versions and Pi 1.0.x and 1.1.0 fail to load; ` +
-				`install Pi 1.3.0, or pin each of these packages to ${version}`,
+				`install Pi ${LATEST_TESTED_PI}, or pin each of these packages to ${version}`,
 		);
 	}
 
