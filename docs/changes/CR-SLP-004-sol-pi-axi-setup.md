@@ -47,7 +47,7 @@ checkout's validation, registers SoL-Pi user-wide with `pi install`, leaves a `.
   cancelled run removes a `.pi/` it created. No dependency install, typecheck, test, audit or Pi
   registration.
 - **Paths.** A project path that does not exist or is not a directory, `<project>/.pi` that is not a
-  directory, `sol-pi.json` that is a directory, and an unwritable `.pi/` each fail the run, naming
+  directory, `sol-pi.json` that is a directory, and an unwritable `.pi/` when the run must write each fail the run, naming
   the path. A dangling `sol-pi.json` link is an existing file that cannot be read.
 - **Base values.** A valid project file's effective values; else the agent directory's
   `sol-pi.json`, read the same way; else the setup defaults: all four mechanisms on, ratio 12.5,
