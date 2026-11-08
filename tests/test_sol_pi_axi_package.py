@@ -48,8 +48,13 @@ def build_distributions() -> tuple[Path, Path]:
 
 
 def tearDownModule():
-    if "dir" in _BUILD:
-        shutil.rmtree(_BUILD["dir"], ignore_errors=True)
+    """Delete the build and forget it: the installed tool's tests import this module and call
+    this teardown, and under `discover -t .` both share one module object, so a cached result
+    left behind would name deleted files."""
+    directory = _BUILD.get("dir")
+    _BUILD.clear()
+    if directory is not None:
+        shutil.rmtree(directory, ignore_errors=True)
 
 
 def wheel_metadata(wheel: Path) -> tuple[list[str], str, str]:
