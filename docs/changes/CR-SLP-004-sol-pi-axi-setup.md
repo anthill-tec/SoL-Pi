@@ -53,7 +53,8 @@ checkout's validation, registers SoL-Pi user-wide with `pi install`, leaves a `.
   `sol-pi.json`, read the same way; else the setup defaults: all four mechanisms on, ratio 12.5,
   reducer on Pi's default provider and model. The agent file is not read when a project file
   exists. With no value flag, a valid project file is left untouched (`unchanged`).
-- **Pi settings** (read only for the setup defaults): the agent directory's `settings.json`. Missing
+- **Pi settings** (read only when the setup defaults enable the reducer and no `--reducer` is
+  given): the agent directory's `settings.json`. Missing
   means no Pi default; invalid JSON or a non-object root fails the run. `defaultProvider` and
   `defaultModel` count only when both are non-empty strings without whitespace. The reducer enabled
   with no provider or model and no `--reducer` fails the run; the reducer disabled writes the
