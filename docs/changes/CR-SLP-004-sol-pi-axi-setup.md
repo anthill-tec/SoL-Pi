@@ -1,6 +1,6 @@
 # CR-SLP-004 — `sol-pi-axi`, an installed AXI command, and its `setup` verb
 
-**Status:** PENDING · Pre-review: ran — touches another project's surface (Model B runs `sol-pi-axi setup`, #1516 items 1–4); 8 points or more
+**Status:** COMPLETED · Pre-review: ran — touches another project's surface (Model B runs `sol-pi-axi setup`, #1516 items 1–4); 8 points or more
 **Type:** feature
 **Priority:** P1 — Model B makes SoL-Pi a prerequisite of every Model B project on Pi
 **Depends on:** CR-SLP-001
