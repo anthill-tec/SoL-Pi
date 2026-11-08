@@ -5,11 +5,12 @@
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it, vi } from "bun:test";
+import { afterEach, beforeAll, describe, expect, it, vi } from "bun:test";
 import {
 	type BashOperations,
 	createBashToolDefinition,
 	type ExtensionAPI,
+	initTheme,
 	type ToolDefinition,
 } from "@earendil-works/pi-coding-agent";
 import {
@@ -87,6 +88,12 @@ async function bashReturnsNonZeroExit(): Promise<boolean> {
 const nonZeroExitIsResult = await bashReturnsNonZeroExit();
 
 const tempDirs: string[] = [];
+
+// Pi 1.5.0's write renderer highlights an incomplete call through Pi's process-global theme, which a
+// real TUI initializes before anything renders (CR-SLP-002 §S3).
+beforeAll(() => {
+	initTheme("dark");
+});
 
 async function createTempDir(): Promise<string> {
 	const dir = await mkdtemp(join(tmpdir(), "pi-then-run-"));
