@@ -226,7 +226,7 @@ and prints zero as `+0`; Bun does not.
       tests matches exactly one test in the run, by the rule above. A comparison of the two JUnit
       reports, attached to the CR's close-out, shows the mapping.
 - [ ] **Fidelity** The run reports at least 3163 `expect()` calls.
-- [ ] **Fidelity** Every test-file hunk in the CR's diff belongs to §S1–§S4; no `it`, `test` or `describe` is removed, and no `.skip`, `.todo`, `.only` or
+- [ ] **Fidelity** Every test-file hunk in the CR's diff belongs to §S1–§S4 or §S6; no `it`, `test` or `describe` is removed, and no `.skip`, `.todo`, `.only` or
       `skipIf` is added except §S2's symlink condition.
 - [ ] **§S1** `git grep -n 'from "vitest"' -- tests` returns nothing.
 - [ ] **§S2** `git grep -n -E 'vi\.waitFor|expect\.soft|ctx\.skip' -- tests` returns nothing.
