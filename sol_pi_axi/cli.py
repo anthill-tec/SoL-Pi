@@ -330,7 +330,7 @@ def _usage_envelope(error: UsageError) -> dict:
 
 def _emit(envelope: dict, fmt: str, code: int) -> int:
     """Print `envelope` under the root `axi`, in `fmt`; returns `code`."""
-    document = {"axi": _ordered(envelope)}
+    document = {"axi": _printable(_ordered(envelope))}
     if fmt == "json":
         import json
 
@@ -350,6 +350,23 @@ _KEY_ORDER = ("verb", "ok", "version", "outcome", "path", "config", "context", "
 
 def _ordered(envelope: dict) -> dict:
     return {key: envelope[key] for key in _KEY_ORDER if key in envelope}
+
+
+def _printable(value):
+    """`value` with every string valid UTF-8 text: a byte a path or argument could not decode (held
+    as a surrogate escape) is written `\\xNN`, any other lone surrogate `\\uNNNN`, so the envelope
+    can always be encoded and printed."""
+    if isinstance(value, str):
+        try:
+            raw = value.encode("utf-8", "surrogateescape")
+        except UnicodeEncodeError:
+            raw = value.encode("utf-8", "backslashreplace")
+        return raw.decode("utf-8", "backslashreplace")
+    if isinstance(value, dict):
+        return {key: _printable(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_printable(item) for item in value]
+    return value
 
 
 def _summary(values: dict) -> dict:

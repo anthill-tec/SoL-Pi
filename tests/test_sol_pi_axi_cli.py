@@ -576,6 +576,36 @@ class EnvelopeTest(CliTestCase):
                 self.assertTrue(self.tree.project_file.is_file())
         self.assertFalse((self.tree.home / ".pi").exists())
 
+    def test_a_non_utf8_path_still_prints_exactly_one_envelope_in_toon_and_json(self):
+        self.with_pi_default()
+        raw = os.fsencode(self.tree.root) + b"/c3v-\xff"
+        os.mkdir(raw)
+        project = os.fsdecode(raw)  # the undecodable byte as a surrogate escape, as argv holds it
+        # The envelope names the undecodable byte as \xff.
+        shown = str(self.tree.root) + "/c3v-\\xff"
+        scenarios = {  # the run, its exit code, and where the envelope names the byte
+            "setup": (["setup", project], self.tree.root, 0,
+                      lambda envelope: (envelope["path"], f"{shown}/.pi/sol-pi.json")),
+            "failed": (["setup", project + "/missing"], self.tree.root, 1,
+                       lambda envelope: (envelope["context"]["project"], f"{shown}/missing")),
+            "usage": (["bogus" + os.fsdecode(b"\xff")], self.tree.root, 2,
+                      lambda envelope: (envelope["error"].split(";")[0], "unknown verb bogus\\xff")),
+            "home": ([], project, 0,
+                     lambda envelope: (envelope["project"]["path"], f"{shown}/.pi/sol-pi.json")),
+        }
+        for name, (args, cwd, code, named) in scenarios.items():
+            for form in ([], ["--format", "json"]):
+                with self.subTest(scenario=name, format=form):
+                    result = self.sol(*args, *form, cwd=cwd)
+                    self.assert_exit(result, code)
+                    if form:
+                        self.assertEqual(result.stdout.count("\n"), 1, result.stdout)
+                        envelope = json.loads(result.stdout)["axi"]
+                    else:
+                        envelope = self.envelope(result)
+                    self.assertEqual(*named(envelope))
+        self.assertTrue(os.path.isfile(raw + b"/.pi/sol-pi.json"))
+
     def test_format_json_is_one_line_parsing_to_the_same_object_as_toon(self):
         self.with_pi_default()
         self.sol("setup", self.tree.project)  # written; the runs below are deterministic
