@@ -98,9 +98,7 @@ def _repository(source: str) -> str | None:
         rest = rest[4:].replace(":", "/", 1)
     rest = rest.split("#", 1)[0]
     _host, _, path = rest.partition("/")
-    path = path.split("@", 1)[0].rstrip("/")
-    if path.endswith(".git"):
-        path = path[:-4]
+    path = path.split("@", 1)[0].rstrip("/").removesuffix(".git")
     return path.lower()
 
 
