@@ -94,6 +94,25 @@ describe("waitFor", () => {
 		expect(medianGap(probe.times)).toBeLessThan(180);
 		expect(probe.calls()).toBeGreaterThanOrEqual(2);
 		expect(probe.calls()).toBeLessThanOrEqual(4);
+
+		// A callback whose promise never settles is called once, and waitFor still rejects at the timeout.
+		let pendingCalls = 0;
+		const pendingStarted = performance.now();
+		const hung = await waitFor(
+			() => {
+				pendingCalls += 1;
+				return new Promise<never>(() => undefined);
+			},
+			{ timeout: 300, interval: 100 },
+		).then(
+			() => undefined,
+			(error: unknown) => error,
+		);
+
+		expect(hung).toBeInstanceOf(Error);
+		expect((hung as Error).message).toBe("Timed out in waitFor!");
+		expect(pendingCalls).toBe(1);
+		expect(performance.now() - pendingStarted).toBeGreaterThanOrEqual(280);
 	});
 
 	it("waits past the default timeout when { timeout } is longer", async () => {

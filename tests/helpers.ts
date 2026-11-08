@@ -304,9 +304,12 @@ export interface WaitForOptions {
 /**
  * Vitest's waitFor contract: calls `callback` until it returns (or resolves) without
  * throwing, every `interval` ms for at most `timeout` ms, and resolves to its value; on timeout it
- * rejects with the callback's last error. It polls on real time even while fake timers are
- * installed.
+ * rejects with the callback's last error. A callback whose promise has not settled by the timeout
+ * is not called again, and `waitFor` rejects at the timeout with its last error, else with
+ * "Timed out in waitFor!". It polls on real time even while fake timers are installed.
  */
+const TIMED_OUT: unique symbol = Symbol("waitFor timed out");
+
 export async function waitFor<T>(
 	callback: () => T | Promise<T>,
 	options: WaitForOptions = {},
@@ -319,15 +322,18 @@ export async function waitFor<T>(
 	const deadline = realSleep(cell, timeout).then(() => {
 		timedOut = true;
 	});
+	const deadlineReached = deadline.then((): typeof TIMED_OUT => TIMED_OUT);
 	try {
+		let lastError: unknown;
 		for (;;) {
-			let lastError: unknown;
 			try {
-				return await callback();
+				// The deadline also ends a call whose promise never settles.
+				const outcome: T | typeof TIMED_OUT = await Promise.race([callback(), deadlineReached]);
+				if (outcome !== TIMED_OUT) return outcome;
 			} catch (error) {
 				lastError = error;
 			}
-			if (timedOut) throw lastError;
+			if (timedOut) throw lastError || new Error("Timed out in waitFor!");
 			await Promise.race([realSleep(cell, interval), deadline]);
 			if (timedOut) throw lastError;
 		}
