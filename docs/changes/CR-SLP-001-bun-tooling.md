@@ -131,6 +131,11 @@ Context.
   `process.execPath`, which is Bun under `bun test`.
 - Each of the four `it.each` tables passes its rows so that Bun formats `%s`, giving each test the
   title Vitest gives it (for example `… (failed=false)` and `… (failed=true)`).
+- **The savings status timer outlives its session.** `bun test` runs every file in one process,
+  so the 4-second timer `showSolPiSavings` (`src/sol-pi/tui.ts`) arms to clear its status fires
+  after a test's session is disposed, reads the stale `context.ui`, and Pi throws "This extension
+  ctx is stale after session replacement or reload" between tests, dropping the next file's tests.
+  The timer is cleared at `session_shutdown`, and a timer firing on a stale context does nothing.
 
 ### §S4 — Fix the machine-dependent tests
 
@@ -215,7 +220,8 @@ and prints zero as `+0`; Bun does not.
 
 - [ ] **Fidelity** The bun client's `regression` reports **0 failed, 0 skipped**, and runs the 274
       reference tests of the Context table, with that table's per-file counts, plus only the
-      `waitFor` tests in `tests/helpers.test.ts`.
+      `waitFor` tests in `tests/helpers.test.ts` and one savings-timer test in `tests/tui.test.ts`;
+      its output has no "Unhandled error between tests".
 - [ ] **Fidelity** Every test identity in the run is unique, and each of the 274 Vitest reference
       tests matches exactly one test in the run, by the rule above. A comparison of the two JUnit
       reports, attached to the CR's close-out, shows the mapping.
@@ -229,6 +235,9 @@ and prints zero as `+0`; Bun does not.
       `{ timeout, interval }` overrides both.
 - [ ] **§S3** The codemode tests pass in two consecutive `regression` runs and when each codemode
       test file is run alone with the client's `test --tests`.
+- [ ] **§S3** `tests/tui.test.ts`: after `session_shutdown`, advancing fake timers past 4 seconds
+      makes no `ui.setStatus` call, and a timer firing on a `ui` whose `setStatus` throws the stale
+      context error throws nothing.
 - [ ] **§S3** The tests that start Pi in a child process start it with `node`; `git grep -n
       process.execPath -- tests` returns no Pi or script launch.
 - [ ] **§S4** `tests/action-fusion.test.ts` passes from a checkout whose directory is named `SoL-Pi`.
