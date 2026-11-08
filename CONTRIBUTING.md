@@ -48,7 +48,7 @@ Before the first release branch's rehearsal:
 
 ### Re-rendering the Release Workflow
 
-`release.yml` is the `modelb-axi release-workflow` rendering for the Bun and Python stacks and the `pypi,npm` targets, plus a fixed set of hand edits (`main` for `master`, the pinned Bun 1.4.4 and test timeout, Node 22 for both test jobs, and the Python job's project, Bun and `PI_BIN` setup). The rendering is committed verbatim as `tests/fixtures/release-workflow/rendered.yml`, and `tests/release-workflow.test.ts` checks that `release.yml` differs from it by exactly those edits. To take a new rendering, render in a scratch copy of the repository with `modelb-axi release-workflow`, copy the result over `tests/fixtures/release-workflow/rendered.yml`, re-apply the hand edits to `release.yml`, and run the tests. Re-rendering in place drops the hand edits.
+`release.yml` is the `modelb-axi release-workflow` rendering for the Bun and Python stacks and the `pypi,npm` targets, plus a fixed set of hand edits (`main` for `master`, the pinned Bun 1.4.4 and test timeout, Node 22 for both test jobs, and the Python job's project, Bun and `PI_BIN` setup). The rendering is committed verbatim as `tests/fixtures/release-workflow/rendered.yml`, and `tests/release-workflow.test.ts` checks that `release.yml` differs from it by exactly those edits. To take a new rendering, render in a scratch copy of the repository with `modelb-axi release-workflow`, copy the result over `tests/fixtures/release-workflow/rendered.yml`, re-apply the hand edits to `release.yml`, and run the tests. Run in place, `modelb-axi release-workflow` skips the hand-modified `release.yml`; with `--force-managed` it overwrites the file and drops the hand edits.
 
 ## Benchmarking and Reports
 
