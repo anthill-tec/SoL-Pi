@@ -1,6 +1,6 @@
 # CR-SLP-001 — Move the project's tooling to Bun; remove Vitest
 
-**Status:** PENDING · Pre-review: ran — the gap analysis needed rulings from the user (the test runner, Bun tooling everywhere)
+**Status:** COMPLETED · Pre-review: ran — the gap analysis needed rulings from the user (the test runner, Bun tooling everywhere)
 **Type:** maintenance
 **Priority:** P0 — every later CR's RED/GREEN/VERIFY runs, the pre-merge gate and CI run `bun test`
 **Depends on:** none
