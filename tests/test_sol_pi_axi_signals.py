@@ -61,6 +61,20 @@ cli._parse = parse
 sys.argv = ["sol-pi-axi", *sys.argv[1:]]
 sys.exit(cli.main())
 '''
+#: Runs `sol-pi-axi <argv[1:]>` in-process with `os.replace` wrapped to send the process the
+#: signal `SOL_PI_AXI_TEST_SIGNAL` names right after the rename — a signal that lands once the file
+#: is written, before the run has recorded it.
+SIGNAL_AFTER_RENAME = '''\
+import os, sys
+_replace = os.replace
+def replace(source, target):
+    _replace(source, target)
+    os.kill(os.getpid(), int(os.environ["SOL_PI_AXI_TEST_SIGNAL"]))
+os.replace = replace
+from sol_pi_axi import cli
+sys.argv = ["sol-pi-axi", *sys.argv[1:]]
+sys.exit(cli.main())
+'''
 
 
 class HeldRunTestCase(unittest.TestCase):
@@ -268,6 +282,31 @@ class SignalOutsideTheWorkTest(unittest.TestCase):
                     self.assertEqual((envelope["verb"], envelope["outcome"], envelope["ok"]),
                                      ("setup", "cancelled", False))
                     self.assertEqual(snapshot(self.tree.project, self.tree.agent), before)
+
+    def test_a_signal_right_after_the_rename_reports_the_written_file(self):
+        self.tree.write_settings({"defaultProvider": "anthropic", "defaultModel": "claude-sonnet-4-5"})
+        for signum in EXIT_CODES:
+            for existing in (False, True):
+                with self.subTest(signal=signum.name, existing_dot_pi=existing):
+                    shutil.rmtree(self.tree.pi_dir, ignore_errors=True)
+                    if existing:
+                        self.tree.write_project_file('{"version":1,"actionFusion":true}')
+                    result = subprocess.run(
+                        [sys.executable, "-c", SIGNAL_AFTER_RENAME, "setup",
+                         str(self.tree.project), "--features", "observationPack"],
+                        cwd=self.tree.root,
+                        env=cli_environ(self.tree, SOL_PI_AXI_TEST_SIGNAL=str(int(signum))),
+                        stdin=subprocess.DEVNULL, capture_output=True, text=True,
+                        timeout=60, check=False)
+                    assert_clean_streams(self, result)
+                    self.assertEqual(result.returncode, 0, f"{result.stdout}\n{result.stderr}")
+                    envelope = decode_envelope(self, result.stdout)
+                    self.assertEqual((envelope["outcome"], envelope["ok"]), ("written", True))
+                    self.assertEqual(envelope["config"]["features"], ["observationPack"])
+                    self.assertEqual(os.listdir(self.tree.pi_dir), ["sol-pi.json"])
+                    written = json.loads(self.tree.project_file.read_text(encoding="utf-8"))
+                    self.assertIs(written["observationPack"], True)
+                    self.assertIs(written["actionFusion"], False)
 
 
 if __name__ == "__main__":

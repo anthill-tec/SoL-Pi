@@ -243,7 +243,8 @@ def _setup(command: dict) -> tuple[dict, int]:
             context["agentDir"] = str(agent)
             result = setup.run_setup(project, agent_dir=agent, features=command["features"],
                                      reducer=command["reducer"],
-                                     cache_ratio=command["cache_ratio"], hook=_hold_hook())
+                                     cache_ratio=command["cache_ratio"], hook=_hold_hook(),
+                                     on_rename=_disarm)
         finally:
             _disarm()
     except Cancelled as cancel:

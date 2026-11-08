@@ -20,7 +20,7 @@ from .config import (
     read_config,
     render_config,
 )
-from .write import WriteHook, write_file
+from .write import RenameHook, WriteHook, write_file
 
 _PROVIDER = "evidencePreservingReducerProvider"
 _MODEL = "evidencePreservingReducerModel"
@@ -84,13 +84,15 @@ def _setup_defaults(enabled: set[str], reducer: tuple[str, str] | None,
 
 def run_setup(project_dir: str | os.PathLike[str], *, agent_dir: str | os.PathLike[str] | None = None,
               features: Iterable[str] | None = None, reducer: tuple[str, str] | None = None,
-              cache_ratio: float | None = None, hook: WriteHook | None = None) -> SetupResult:
+              cache_ratio: float | None = None, hook: WriteHook | None = None,
+              on_rename: RenameHook | None = None) -> SetupResult:
     """Write `<project>/.pi/sol-pi.json` from its base values and the given values.
 
     `features` names the enabled mechanisms (the others off), `reducer` is `(provider, model)`,
     `cache_ratio` the cache write/read ratio; `None` leaves each as the base values have it. A
     valid project file with no value given is left untouched. `hook` is the writing module's
-    test-only hook. A failure raises `ConfigError` naming the path and changes nothing; a `.pi/`
+    test-only hook; `on_rename` its callback right after the rename, run with the signals
+    blocked (the command line disarms its signal handlers there). A failure raises `ConfigError` naming the path and changes nothing; a `.pi/`
     the run created is removed when it fails."""
     project = _project_dir(project_dir)
     agent_directory = Path(agent_dir) if agent_dir is not None else config.agent_dir()
@@ -127,11 +129,12 @@ def run_setup(project_dir: str | os.PathLike[str], *, agent_dir: str | os.PathLi
             except OSError as error:
                 raise ConfigError(f"cannot create {pi_dir}: {error.strerror or error}") from None
         try:
-            outcome = write_file(target, render_config(values), hook=hook)
+            outcome = write_file(target, render_config(values), hook=hook, on_rename=on_rename)
         except OSError as error:
             raise ConfigError(f"cannot write {target} in {pi_dir}: {error.strerror or error}") from None
     except BaseException:
-        if created:
+        # A `.pi/` the run created is removed only while it holds no written file.
+        if created and not os.path.lexists(target):
             pi_dir.rmdir()
         raise
     return SetupResult(outcome, target, values, warnings)
