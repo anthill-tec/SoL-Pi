@@ -1,6 +1,6 @@
 # CR-SLP-004 — `sol-pi-axi`, an installed AXI command, and its `setup` verb
 
-**Status:** PENDING · Pre-review: due — touches another project's surface (Model B runs `sol-pi-axi setup` from `modelb-axi init` and `agents`, message #1516 items 1–4); 8 points or more; re-designed 2026-11-04 (Python package on PyPI, in place of a Bun command)
+**Status:** PENDING · Pre-review: ran — touches another project's surface (Model B runs `sol-pi-axi setup` from `modelb-axi init` and `agents`, message #1516 items 1–4); 8 points or more; re-designed 2026-11-04 (Python package on PyPI, in place of a Bun command)
 **Type:** feature
 **Priority:** P1 — Model B makes SoL-Pi a prerequisite of every Model B project on Pi
 **Depends on:** CR-SLP-001
@@ -83,7 +83,12 @@ Model B's release tooling (`stamp_version.py`) reads a `pypi` target's version f
   distribution holds only `pyproject.toml`, `README.md`, `LICENSE` and `sol_pi_axi/`. The npm
   package holds no Python file: `package.json` `files` already lists only the extension's files.
 - **Python tests** are `tests/test_*.py`, run with `unittest` discovery from `tests`, beside the
-  Bun tests; neither runner collects the other's files.
+  Bun tests; neither runner collects the other's files. A new `tests/__init__.py` makes `tests` a
+  package, for dotted test targets and discovery with `-t .`. The tests import `sol_pi_axi` as an
+  installed package: the project's `.venv` (Python 3.14) holds it editable with its `dev` extra
+  (`uv venv --python 3.14`, then `uv pip install -e '.[dev]'`), which is the precondition of the
+  Python test runs. Until CR-SLP-007 adds the `test-python` CI job, the Python tests are gated
+  locally only.
 - `.gitignore` adds `.venv/` and `*.egg-info/`.
 - The package imports no Node or Pi code and runs no `bun` or `node`.
 - **Version fast path.** A lone `-v`, `-V` or `--version` prints the bare version and exits 0
@@ -97,9 +102,13 @@ Model B's release tooling (`stamp_version.py`) reads a `pypi` target's version f
   the agent directory `$PI_CODING_AGENT_DIR` (when non-empty, with a leading `~` expanded) else
   `~/.pi/agent`.
 - **Scope of the run.** It writes at most `<project dir>/.pi/sol-pi.json`, creating
-  `<project dir>/.pi/` when missing; a run that fails removes a `.pi/` it created. It runs no
+  `<project dir>/.pi/` when missing; a run that fails or is cancelled removes a `.pi/` it created. It runs no
   dependency install, typecheck, test or audit, registers nothing with Pi, and writes nothing
   else. A project path that does not exist, or is not a directory, fails the run.
+- **Target paths.** Each of these fails the run, changes no file and names the path in `error`:
+  `<project>/.pi` existing as something other than a directory; `.pi/sol-pi.json` existing as a
+  directory; a `.pi/` the run cannot write to. A `sol-pi.json` symbolic link whose target does not
+  exist is an existing project file that cannot be read.
 - **Base values.** When the project file exists and is valid, its effective values (the runtime
   defaults for omitted keys). Otherwise, the agent directory's `sol-pi.json` when it exists, read
   the same way. Otherwise the setup defaults: all four mechanisms enabled, ratio 12.5, the reducer
@@ -107,25 +116,37 @@ Model B's release tooling (`stamp_version.py`) reads a `pypi` target's version f
 - **Flags override the base** (§S3). With no value flag, an existing valid project file is left
   untouched (`unchanged`). The agent directory's file is not consulted when a project file exists.
 - **Pi settings.** Read only when the setup defaults are used: the agent directory's
-  `settings.json`, not a project's. A missing file means no Pi default; a malformed one fails the
-  run. When the resulting configuration enables the reducer and has no provider or model (no Pi
-  default and no `--reducer`), the run fails. With the reducer disabled, the reducer keys are the
+  `settings.json`, not a project's. A missing file means no Pi default; one that is not valid JSON,
+  or whose root is not an object, fails the run. A `defaultProvider` or `defaultModel` that is not a
+  non-empty string free of whitespace counts as absent. Pi's default is used only when both are
+  present. When the resulting configuration enables the reducer and has no provider or model (no
+  usable Pi default and no `--reducer`), the run fails. With the reducer disabled, the reducer keys are the
   built-in route.
 - **Validation.** `sol_pi_axi`'s configuration module applies the rules of `loadSolPiConfig`: a
   JSON object, only known keys, `version` 1, boolean features, a finite non-negative ratio,
-  non-empty reducer strings. A shared table of conformance cases under
-  `tests/fixtures/sol-pi-config/` (each a configuration file and its expected verdict and effective
-  values) is run by a Python test against the module and by a Bun test against `loadSolPiConfig`
-  and `scripts/check-sol-pi-config.mjs`, so the implementations cannot drift apart. An invalid
+  non-empty reducer strings trimmed as JavaScript's `trim()` trims. JSON is read as JavaScript's
+  `JSON.parse` reads it: the `NaN` and `Infinity` literals are rejected, and a boolean is never a
+  number (`version: true` and a ratio of `true` are invalid). A shared table of conformance cases
+  under `tests/fixtures/sol-pi-config/` (each a configuration file and its expected verdict and
+  effective values) is run by a Python test against the module and by a Bun test against
+  `loadSolPiConfig` and `scripts/check-sol-pi-config.mjs`, so the implementations cannot drift
+  apart.
+- **Golden written files.** `tests/fixtures/sol-pi-config/written/` holds the files `setup` writes
+  for a fixed set of inputs (the setup defaults, every feature list form, the reducer off, a custom
+  ratio). A Python test asserts `setup` writes exactly those bytes; the Bun test runs each through
+  `loadSolPiConfig` and `scripts/check-sol-pi-config.mjs`. Neither runner needs the other's
+  runtime. An invalid
   file the run needs fails it and is left untouched.
 - **Written form.** Every key, in the order of `sol-pi.example.json`, tab indentation, a final
   newline. When the text equals the file's bytes, nothing is written (`unchanged`).
 - **Writing.** The text goes to a temporary file in the target's directory, renamed over the
   target. Through a symbolic link, the link's target file is replaced and the link kept. An existing
-  file's permission bits are kept. The writing module takes an optional hook between writing the
+  file's permission bits are kept; a new file gets `0o666` less the process's umask. The writing module takes an optional hook between writing the
   temporary file and renaming it, which only tests set.
-- **Signals.** `SIGINT`, `SIGTERM` or `SIGHUP` during a run removes the temporary file, writes
-  nothing, prints the envelope with `outcome` `cancelled`, and exits 130, 143 or 129.
+- **Signals.** `SIGINT`, `SIGTERM` or `SIGHUP` during a run removes the temporary file and a `.pi/`
+  the run created, writes nothing, prints the envelope with `outcome` `cancelled`, and exits 130,
+  143 or 129. The command installs its own handlers for the three whatever disposition it
+  inherited.
 - **Earlier backups.** A `sol-pi.json.bak` left by an earlier setup script is not touched; a
   warning names it.
 
@@ -143,7 +164,7 @@ Model B's release tooling (`stamp_version.py`) reads a `pypi` target's version f
   - `--reducer <provider>/<model>`: split at the first `/`; both parts non-empty with no
     whitespace (the model may contain `/`).
   - `--cache-ratio <number>`: digits with an optional decimal fraction (no sign, exponent, hex or
-    surrounding space).
+    surrounding space), whose value is finite.
   - `--format toon|json`: the output encoding; `toon` by default.
   - `--non-interactive`: accepted and changes nothing, since the command never prompts; it is the
     switch Model B passes under its `--yes`.
@@ -222,6 +243,9 @@ Tests run the command against a temporary project, agent directory and home, wit
 - [ ] **§S1** `__version__` equals `package.json`'s `version`, and `stamp_version.py read pypi:.`
       reads it.
 - [ ] **§S1** `bun pm pack --dry-run` lists no `.py` file and no `pyproject.toml`.
+- [ ] **§S1** The Python suite runs through the python client's discovery from `tests` and through
+      `python -m unittest discover -s tests -t .`, both against the editable install, with the same
+      tests passing.
 - [ ] **§S1** No module of `sol_pi_axi` starts `bun` or `node` or imports Node or Pi code.
 - [ ] **§S1** `-v`, `-V` and `--version` each print the bare version and exit 0 with `toon_format`
       not imported (checked by a run that makes the import fail); the median of five runs of the
@@ -242,18 +266,29 @@ Tests run the command against a temporary project, agent directory and home, wit
       `--reducer`; the same with `--features actionFusion` (reducer off) writes the built-in
       reducer route and exits 0.
 - [ ] **§S2** A project path that is a regular file, or does not exist, exits 1 with `failed`.
+- [ ] **§S2** `<project>/.pi` as a regular file, `.pi/sol-pi.json` as a directory, a dangling
+      `sol-pi.json` link, and a read-only `.pi/` each exit 1 with `failed`, change no file and name
+      the path in `error`.
+- [ ] **§S2** A `settings.json` whose root is an array fails the run; a non-string, empty or
+      whitespace-holding `defaultProvider` or `defaultModel`, and only one of the two present, each
+      count as no Pi default, so the run fails with `--reducer` in `help[]` when the reducer is
+      enabled.
 - [ ] **§S2** Listing `<project dir>/.pi/` before and after any run shows no added file other than
       `sol-pi.json`; a leftover `sol-pi.json.bak` is still there and named in `warnings`.
 - [ ] **§S2** The conformance table covers at least: a minimal valid file, every key valid, an
-      unknown key, `version` 2, a non-boolean feature, a negative, infinite and string ratio, an
-      empty reducer string, a JSON array and malformed JSON. The Python test and the Bun test each
-      pass every case, and every file `setup` writes is accepted by `loadSolPiConfig` and
-      `scripts/check-sol-pi-config.mjs`.
+      unknown key, `version` 2, `true`, `1.0` and `"1"`, a non-boolean feature, a negative, string
+      and `true` ratio, the `NaN` and `Infinity` literals and `1e999` as the ratio, an empty, a
+      whitespace-only and a padded reducer string (the last valid, its value trimmed), a JSON array
+      and malformed JSON. The Python test and the Bun test each pass every case.
+- [ ] **§S2** `setup` writes exactly the golden files' bytes for their inputs, and the Bun test
+      accepts every golden file through `loadSolPiConfig` and `scripts/check-sol-pi-config.mjs`.
+- [ ] **§S2** Under umask 022, a newly written `sol-pi.json` has mode 0644.
 - [ ] **§S2** A write through a symbolic link replaces the link's target and keeps the link; an
       existing file's permission bits are kept.
 - [ ] **§S2** With the test hook holding a run between writing and renaming, `SIGINT`, `SIGTERM`
       and `SIGHUP` each leave no temporary file and no changed file, print `cancelled`, and exit
-      130, 143 and 129.
+      130, 143 and 129; started on a project with no `.pi/`, the project still has none; started
+      with `SIGINT` ignored, `SIGINT` still cancels.
 - [ ] **§S2** `PI_CODING_AGENT_DIR=~/agent` reads `$HOME/agent`; an empty `PI_CODING_AGENT_DIR`
       reads `~/.pi/agent`.
 - [ ] **§S3** `--features`, `--reducer` and `--cache-ratio` each override the base values and
@@ -263,7 +298,7 @@ Tests run the command against a temporary project, agent directory and home, wit
 - [ ] **§S3** With standard input a terminal, the command does not prompt.
 - [ ] **§S3** `--features ''`, `a,,b`, a duplicate name, `all,actionFusion` and a wrongly cased
       name; `--reducer` `provider/`, `/model` and ` p/m`; `--cache-ratio` `''`, `-1`, `1e3`, `0x10`
-      and ` 2` each exit 2 with `usage`.
+      and ` 2`, and `1` followed by 400 zeros, each exit 2 with `usage`.
 - [ ] **§S4** `--help` anywhere (for example `setup x --help`) exits 0 with the help text;
       `--version` after other arguments prints the version.
 - [ ] **§S4** Every run other than help and version prints one envelope with the keys §S4 gives for
@@ -288,9 +323,10 @@ Tests run the command against a temporary project, agent directory and home, wit
 
 ## Estimated size
 
-13 points. A new Python package with its packaging, a strict flag grammar, an AXI envelope for
-three verbs, signal handling, a validation module held equal to the extension's by a shared
-conformance table, the version fast path and docs.
+13 points, at the cap. A new Python package with its packaging and test layout, a strict flag
+grammar, an AXI envelope for three verbs, signal handling, a validation module held equal to the
+extension's by a shared conformance table and golden files across two runtimes, the target-path
+edge cases, the version fast path and docs.
 
 ## Risks
 

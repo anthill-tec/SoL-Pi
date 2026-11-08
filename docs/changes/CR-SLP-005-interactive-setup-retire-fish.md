@@ -1,6 +1,6 @@
 # CR-SLP-005 — Opt-in interactive `setup` and `install`; the fish setup script retired
 
-**Status:** PENDING · Pre-review: due — touches another project's surface (Model B passes a terminal through to the interactive run, message #1516 item 3); re-designed 2026-11-04 (`sol-pi-axi` replaces the fish script)
+**Status:** PENDING · Pre-review: ran — touches another project's surface (Model B passes a terminal through to the interactive run, message #1516 item 3); re-designed 2026-11-04 (`sol-pi-axi` replaces the fish script)
 **Type:** feature
 **Priority:** P1 — completes Model B's request and leaves `sol-pi-axi` as the one way to set SoL-Pi up
 **Depends on:** CR-SLP-004, CR-SLP-007
@@ -24,14 +24,19 @@ is removed.
 **Python at a terminal.** `input()` reads from standard input and writes its prompt to standard
 output, so the command reads lines itself and writes prompts to standard error. The Ctrl+C
 keystroke at a terminal in canonical mode sends `SIGINT` to the foreground process group, which
-Python raises as `KeyboardInterrupt`; end of input (Ctrl+D on an empty line) makes the read return
-an empty string, with no exception.
+Python raises as `KeyboardInterrupt` — unless the process inherited `SIGINT` as ignored, when
+Python installs no handler and the keystroke does nothing. End of input (Ctrl+D on an empty line)
+makes the read return an empty string, with no exception; Ctrl+D after typed text only ends the
+line. Measured with Python 3.14.9 on a pseudo-terminal: when the terminal closes, a process that
+leads its session dies of `SIGHUP`, while one that does not (the case when a caller passes its
+terminal through) gets no signal and an `OSError` (`EIO`) on its next read or write.
 
 **What is retired.** `setup-sol-pi.fish` (944 lines) runs a checkout's validation (dependency
 install, typecheck, tests, audit), finds Pi, runs the strict compatibility check, registers SoL-Pi
 with `pi install <checkout path>`, writes `sol-pi.json` with a `.bak` beside it, runs a smoke test
-and prints a report; `--uninstall` reverses it. It prompts through
-`setup-sol-pi-interactive.mjs` and `scripts/query-pi-models.mjs`. `tests/setup-prompt-flow.test.ts`
+and prints a report; `--uninstall` restores `sol-pi.json` from the `.bak` or deletes it, and
+removes the registration. It lists models through `scripts/query-pi-models.mjs`.
+`setup-sol-pi-interactive.mjs` is an unused leftover: nothing references it. `tests/setup-prompt-flow.test.ts`
 tests its prompt functions through `tests/fixtures/drive-pty.py`, and skips where `fish` or
 `python3` is missing. CR-SLP-001 adds a Bun prerequisite check to the script; CR-SLP-002 no longer
 changes it.
@@ -68,10 +73,16 @@ list, help text and valid-flag lists.
   `setup` writes when the values differ from the base values (`written`) and reports `unchanged`
   otherwise; `install` registers and writes.
 - **Channels.** Prompts go to standard error; standard output carries only the envelope.
-- **Cancel.** Each of these cancels the run: declining the confirmation, the Ctrl+C keystroke at a
-  prompt, end of input (Ctrl+D), and a `SIGINT` signal; they exit 130. `SIGTERM` exits 143 and
-  `SIGHUP` (the terminal closing) 129. In every case nothing is written, nothing is registered and
-  no temporary file is left.
+- **Cancel.** Before the confirmation is answered, each of these cancels the run: declining the
+  confirmation, the Ctrl+C keystroke at a prompt, end of input (Ctrl+D on an empty line), and a
+  `SIGINT` signal; they exit 130. `SIGTERM` exits 143. The terminal closing exits 129, whether it
+  arrives as `SIGHUP` or as an `OSError` reading or writing the terminal. In every case nothing is
+  written, nothing is registered and no temporary file is left.
+- **Handlers.** The command installs its own `SIGINT`, `SIGTERM` and `SIGHUP` handlers whatever
+  disposition it inherited, so a run started with `SIGINT` ignored can still be cancelled.
+- **After the confirmation**, signals follow the verb's non-interactive rules (CR-SLP-004 §S2,
+  CR-SLP-007 §S2): the temporary file is removed, and the `cancelled` envelope of `install` reports
+  in `extension` what was already registered.
 - **The `cancelled` envelope.** `ok: false`, `outcome: cancelled`, `error` naming what cancelled the
   run, `path` the target configuration path (`config.path` for `install`), `config` the values shown
   so far (`null` before the first answer), and `help[]` with the command to run again.
@@ -83,8 +94,21 @@ list, help text and valid-flag lists.
 **Surfaces:** `setup-sol-pi.fish`, `setup-sol-pi-interactive.mjs`, `scripts/query-pi-models.mjs`,
 `tests/setup-prompt-flow.test.ts`, `tests/fixtures/drive-pty.py`, and every file that names them.
 
-- The four files are deleted, with `tests/fixtures/drive-pty.py` when nothing else uses it. Their
-  tests go with them: the prompt behaviour they covered is covered by §S1's tests.
+- `setup-sol-pi.fish`, `setup-sol-pi-interactive.mjs`, `scripts/query-pi-models.mjs`,
+  `tests/setup-prompt-flow.test.ts` and `tests/fixtures/drive-pty.py` are deleted. Their tests go
+  with them: the prompt behaviour they covered is covered by §S1's tests, whose pseudo-terminal
+  harness is a new module under the Python tests (`tests/pty_harness.py`).
+- **Behaviour not carried over**, each stated in the changelog's mapping:
+  - the strict compatibility check that failed the setup on an untested Pi becomes a warning in
+    `install` (CR-SLP-007);
+  - the post-install smoke test (Pi started offline, its output searched for extension errors) is
+    dropped;
+  - `--uninstall`'s restore from `sol-pi.json.bak` is dropped: `uninstall` deletes no
+    configuration file, and a leftover `.bak` is named by `setup`;
+  - registering the local checkout is replaced by the npm source; developing from a checkout is
+    `CONTRIBUTING.md`'s;
+  - the dependency audit and the all-mechanisms test run under `bun run check` and
+    `bun audit --audit-level=high`, which `CONTRIBUTING.md` documents.
 - No file outside `docs/changes/` and `CHANGELOG.md` names the deleted files.
 - What the script did and where it now lives is stated in `CHANGELOG.md`: the user-wide setup is
   `sol-pi-axi install`, the project setup `sol-pi-axi setup`, the prompts `--interactive`, the
@@ -96,6 +120,8 @@ list, help text and valid-flag lists.
 
 - README and `agents-install.md` document `--interactive`, when it prompts, `PI_NONINTERACTIVE`, and
   the cancel exit codes and why they extend AXI's.
+- `CONTRIBUTING.md` documents validating a checkout: `bun run check` and
+  `bun audit --audit-level=high`.
 - `CHANGELOG.md` `[Unreleased]` records the interactive mode and the script's removal, with §S2's
   mapping.
 
@@ -108,7 +134,8 @@ home, with CR-SLP-007's stub `pi` on `PATH`.
 - [ ] **§S1** On the terminal, `setup --interactive` prompts; answering writes the chosen values and
       the envelope on the standard-output pipe reports `written`; the pipe holds no prompt text.
 - [ ] **§S1** `install --interactive` on an empty agent directory prompts, then registers and writes
-      the chosen values; with `sol-pi.json` present it prompts for nothing and installs.
+      the chosen values; with `sol-pi.json` present it prompts for nothing, installs, and its
+      `warnings` has no entry about the interactive mode.
 - [ ] **§S1** `--interactive` with `PI_NONINTERACTIVE=1`, with standard input not a terminal, or with
       standard error not a terminal does not prompt, carries a warning saying why, and gives the
       same outcome and exit code as the same run without `--interactive`; `PI_NONINTERACTIVE=`
@@ -127,15 +154,23 @@ home, with CR-SLP-007's stub `pi` on `PATH`.
       other than yes or no each repeat their prompt; answering the reducer "no" skips the provider
       and model prompt.
 - [ ] **§S1** Confirming values equal to the base reports `unchanged` and writes nothing.
-- [ ] **§S1** Declining the confirmation, the Ctrl+C keystroke written to the terminal, end of
-      input, and a `SIGINT` signal each exit 130; `SIGTERM` exits 143 and `SIGHUP` 129; each prints
-      a `cancelled` envelope with the keys §S1 lists, writes nothing, registers nothing and leaves
-      no temporary file.
+- [ ] **§S1** At a prompt, declining the confirmation, the Ctrl+C keystroke written to the terminal,
+      Ctrl+D on an empty line, and a `SIGINT` signal each exit 130; `SIGTERM` exits 143 and
+      `SIGHUP` 129; each prints a `cancelled` envelope with the keys §S1 lists, writes nothing,
+      registers nothing and leaves no temporary file.
+- [ ] **§S1** Closing the pseudo-terminal's master with no signal, the command running outside its
+      own session's lead, exits 129 with the `cancelled` envelope on the standard-output pipe.
+- [ ] **§S1** A run started with `SIGINT` ignored exits 130 on the Ctrl+C keystroke.
+- [ ] **§S1** `SIGTERM` sent while the stub `pi install` runs after the confirmation exits 143 with a
+      `cancelled` envelope whose `extension` reports the registration state, and leaves no
+      temporary file.
 - [ ] **§S2** `git grep -n -E 'setup-sol-pi|query-pi-models|drive-pty' -- . ':!docs/changes'
       ':!CHANGELOG.md'` returns nothing, and the deleted files are gone.
-- [ ] **§S2** The Bun suite's test count falls by exactly the tests of
-      `tests/setup-prompt-flow.test.ts`, and no other test is removed or skipped.
-- [ ] **§S3** README and `agents-install.md` cover §S3's items, checked by
+- [ ] **§S2** The Bun suite's total test count (passed and skipped) falls by exactly 6, the `it`
+      cases of `tests/setup-prompt-flow.test.ts`; against the base, no other test changes name or
+      status.
+- [ ] **§S2** `CHANGELOG.md`'s mapping names each item of "Behaviour not carried over".
+- [ ] **§S3** README, `agents-install.md` and `CONTRIBUTING.md` cover §S3's items, checked by
       `tests/install-guide.test.ts`; `CHANGELOG.md` `[Unreleased]` records the changes with §S2's
       mapping.
 - [ ] **Gate** The Bun and the Python `pre-merge-gate` both pass.
@@ -156,4 +191,5 @@ references, and docs.
 
 - Prompts without `--interactive`.
 - Changing what `install` registers or what the setup defaults are.
-- A replacement for the script's checkout validation outside `bun run check`.
+- A replacement for the script's checkout validation outside `bun run check` and `bun audit`.
+- A post-install smoke test, and a strict (failing) Pi compatibility check in `install`.

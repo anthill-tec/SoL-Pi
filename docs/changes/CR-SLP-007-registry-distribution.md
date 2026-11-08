@@ -1,9 +1,9 @@
 # CR-SLP-007 — Registry distribution: `@anthill-tec/sol-pi` on npm, `sol-pi-axi install` and publishing
 
-**Status:** PENDING · Pre-review: due — touches another project's surface (Model B's contract names the install commands, message #1534); new CR; release workflow and two public registries
+**Status:** PENDING · Pre-review: ran — touches another project's surface (Model B's contract names the install commands, message #1534); new CR; release workflow and two public registries
 **Type:** feature
 **Priority:** P1 — 0.1.0 is the first release Model B installs; it must come from the registries
-**Depends on:** CR-SLP-004, CR-SLP-001
+**Depends on:** CR-SLP-004, CR-SLP-002 (the tested Pi versions this CR mirrors), CR-SLP-001
 **Labels:** release, packaging, npm, pypi, cli, docs
 **Phase:** 0.1.0 · wave 1
 **Design reference:** CR-SLP-004 (`sol-pi-axi`); Model B's release workflow generator
@@ -28,9 +28,12 @@ list holds the extension, docs and `scripts/check-sol-pi-config.mjs`; `pi.extens
 `./src/sol-pi/index.ts`. Pi loads an npm package's TypeScript entry directly and installs packages
 with peers omitted.
 
-**Pi's records.** `pi install <source>` adds the source to the agent directory's `settings.json`
-`packages` list (an entry is the source string, or an object with `source`); `pi remove <source>`
-takes it out. `pi --version` prints the bare version.
+**Pi's records** (Pi 1.5.0, `DefaultPackageManager`). `pi install <source>` adds the source to the
+agent directory's `settings.json` `packages` list (an entry is the source string, or an object
+with `source` and filters). An npm source replaces, in place and keeping the entry's other fields,
+an entry for the same package name at any version. A local path is stored relative to the agent
+directory, while `pi remove <path>` resolves its argument against the working directory.
+`pi --version` prints the bare version.
 
 **Release workflow.** `.github/workflows/release.yml` is rendered by `modelb-axi release-workflow`
 from `PROJECT_STACKS` and `RELEASE_TARGETS`. Rendered for `bun,python` and `pypi,npm` it adds a
@@ -54,6 +57,8 @@ indent. CR-SLP-001 sets `test-bun`'s `bun-version: 1.4.4` and its command
   `{"access": "public"}`; `repository` names `https://github.com/anthill-tec/SoL-Pi`; `keywords`
   include `pi-package`.
 - `package.json` is indented with two spaces, so `stamp_version.py` can stamp and check it.
+- `package.json` `version` and `sol_pi_axi/_version.py` are `0.1.0`, the first release of this
+  project, in place of the inherited `0.1.1`.
 - `files`, `pi.extensions`, `peerDependencies` and `dependencies` are unchanged; the package holds
   no Python file (CR-SLP-004 §S1).
 
@@ -62,19 +67,28 @@ indent. CR-SLP-001 sets `test-bun`'s `bun-version: 1.4.4` and its command
 **Surfaces:** `sol_pi_axi/` (an `install` verb, a Pi module), its help text and valid-verb lists.
 
 - **Pi.** The command runs the `pi` named by `$PI_BIN` when set, else the `pi` on `PATH`. With
-  neither, the run fails naming both. It reads `pi --version`; a version outside the tested set
-  (`TESTED_PI_VERSIONS`, which a test holds equal to `scripts/check-pi-compat.mjs`'s) is a warning,
-  not a failure.
+  neither, the run fails naming both. Every `pi` command runs with the user's home as its working
+  directory, so no project's `.pi/` is read. It reads `pi --version`; a version outside the tested
+  set (`TESTED_PI_VERSIONS`, which a test holds equal to `scripts/check-pi-compat.mjs`'s, which
+  CR-SLP-002 extends to 1.5.0) is a warning, not a failure.
 - **The source.** The extension's source is `npm:@anthill-tec/sol-pi@<version>`, `<version>` being
-  `sol-pi-axi`'s own.
+  `sol-pi-axi`'s own. A version that is not a plain `X.Y.Z` (a rehearsal's `X.Y.Z.devN`) fails the
+  run before any `pi` command, naming the version, with `pi install <checkout path>` in `help[]`
+  for development.
 - **Order.** The run first resolves the agent directory's configuration (below), then registers
   the extension, then writes the configuration. A failure before registering changes nothing.
 - **Registering.** When the agent directory's `settings.json` `packages` already holds exactly the
-  source, nothing is registered. When it holds another SoL-Pi source — an `npm:@anthill-tec/sol-pi`
-  source at another version, an `npm:sol-pi` source, a `git:` or URL source naming
-  `anthill-tec/SoL-Pi` or `NVlabs/SoL-Pi`, or a local path whose `package.json` is named `sol-pi` or
-  `@anthill-tec/sol-pi` — the run removes it with `pi remove` and names it in `warnings`, then
-  runs `pi install <source>`. Project-level `.pi/settings.json` files are never read or changed.
+  source, nothing is registered. Otherwise the run runs `pi install <source>`; an
+  `npm:@anthill-tec/sol-pi` entry at another version is replaced in place by Pi and named in
+  `replaced` and `warnings`. Any other SoL-Pi source — an `npm:sol-pi` source, a `git:` or URL
+  source naming `anthill-tec/SoL-Pi` or `NVlabs/SoL-Pi`, or a local path whose `package.json` is
+  named `sol-pi` or `@anthill-tec/sol-pi` — is removed with `pi remove` only after `pi install`
+  succeeded, and named in `replaced` and `warnings`. A local path is passed to `pi remove` as an
+  absolute path, resolved against the agent directory. Project-level `.pi/settings.json` files are
+  never read or changed.
+- **Checking Pi's record.** After `pi install`, the run reads `settings.json` again; when the source
+  is not there (Pi wrote another agent directory), it fails naming the directory it read and
+  `$PI_CODING_AGENT_DIR`'s role.
 - **Configuration.** When `<agent dir>/sol-pi.json` is absent, the run writes it with CR-SLP-004's
   setup defaults, after the value flags `--features`, `--reducer` and `--cache-ratio`, using
   CR-SLP-004's validation, written form and atomic write. A missing reducer provider or model fails
@@ -83,7 +97,10 @@ indent. CR-SLP-001 sets `test-bun`'s `bun-version: 1.4.4` and its command
   named in `warnings` as not applied.
 - **Pi failing.** A `pi` command that exits non-zero fails the run: `error` names the command and
   its exit code, `pi`'s own output goes to standard error, and a file not yet written stays
-  unwritten.
+  unwritten. A failed `pi install` leaves every earlier source registered. The `failed` envelope's
+  `extension` reports the registration state as the run left it (`source` registered or not, and
+  `replaced`). A configuration write that fails after registering fails the run with the
+  registration reported.
 - **Envelope.** `verb: install`, with `outcome` (`installed`, `unchanged`, `failed`,
   `cancelled`), `extension` (`source`, `replaced` as the list of removed sources, `pi` as Pi's
   version), `config` (`path`, `state` `written` or `kept`, and the values as `setup` reports them),
@@ -96,7 +113,8 @@ indent. CR-SLP-001 sets `test-bun`'s `bun-version: 1.4.4` and its command
 **Surfaces:** `sol_pi_axi/` (an `uninstall` verb).
 
 - The run removes, with `pi remove`, every SoL-Pi source §S2 recognises in the agent directory's
-  `settings.json` `packages`; with none, it reports `unchanged` and runs no `pi` command.
+  `settings.json` `packages` (a local path passed as an absolute path, resolved against the agent
+  directory); with none, it reports `unchanged` and runs no `pi` command.
 - It deletes no configuration file. `warnings` names `<agent dir>/sol-pi.json` when it exists, and
   says project files are left as they are.
 - **Envelope.** `verb: uninstall`, with `outcome` (`removed`, `unchanged`, `failed`,
@@ -120,11 +138,15 @@ indent. CR-SLP-001 sets `test-bun`'s `bun-version: 1.4.4` and its command
 - `RELEASE_TARGETS` is `pypi,npm`, and `release.yml` is rendered from it with
   `modelb-axi release-workflow`.
 - Hand edits to the rendering, kept until Model B's generator makes them unnecessary:
-  - `main` in place of `master`: the comment header, the push trigger, `create-release`'s branch
-    condition, and both publish guards;
+  - `main` in place of `master`: the comment header (its push, recovery and red-run lines), the
+    push trigger, `create-release`'s branch condition, and both publish guards (their step names,
+    the `git fetch` ref and `origin/main`);
   - `test-bun` keeps CR-SLP-001's `bun-version: 1.4.4` and `bun test --timeout 30000`;
   - `test-python` installs the project with its `dev` extra before discovery, and runs the same
     discovery.
+- The rendering the hand edits apply to is committed as `tests/fixtures/release-workflow/rendered.yml`
+  (stacks `bun,python`, targets `pypi,npm`, with its generator header); `CONTRIBUTING.md` says how
+  to render it again.
 - Every publish job and the rehearsal need both test jobs; the rehearsal uploads to TestPyPI and
   dry-runs the npm publish; `create-release` checks the tag against `pypi:.` and `npm:.`.
 - **One-time setup** (the release workflow's header lists it): GitHub environments `pypi` and
@@ -153,8 +175,8 @@ Command tests run against a temporary agent directory and home with a stub `pi` 
 records its arguments and edits `settings.json` the way `pi install` and `pi remove` do.
 
 - [ ] **§S1** `package.json` has §S1's `name`, `publishConfig`, `repository` and `keywords`, no
-      `private`, two-space indentation; `stamp_version.py check <version> pypi:. npm:.` passes on
-      the tree.
+      `private`, two-space indentation; `stamp_version.py check 0.1.0 pypi:. npm:.` passes on the
+      tree.
 - [ ] **§S1** `bun pm pack --dry-run` lists the same files as before this CR, under the new name.
 - [ ] **§S1** The packed tarball, unpacked and loaded by a real Pi session on the development
       dependency with its path as the extension, registers SoL-Pi's tools.
@@ -162,11 +184,20 @@ records its arguments and edits `settings.json` the way `pi install` and `pi rem
       version>`, writes `sol-pi.json` with the setup defaults, exits 0 and reports `installed`; a
       second run runs no `pi install` or `pi remove`, leaves the file's bytes and modification time
       alone, and reports `unchanged`.
-- [ ] **§S2** Each of `npm:@anthill-tec/sol-pi@0.0.9`, `npm:sol-pi`,
-      `git:github.com/NVlabs/SoL-Pi`, `https://github.com/anthill-tec/SoL-Pi` and a local checkout
-      path in `packages` is removed with `pi remove` and named in `replaced` and `warnings` before
-      the new source is installed; an unrelated package is left alone; a project's
-      `.pi/settings.json` is untouched.
+- [ ] **§S2** An `npm:@anthill-tec/sol-pi@0.0.9` entry is replaced by `pi install` alone, with no
+      `pi remove`, and named in `replaced`; each of `npm:sol-pi`, `git:github.com/NVlabs/SoL-Pi`,
+      `https://github.com/anthill-tec/SoL-Pi` and a relative local checkout path is removed with
+      `pi remove` after `pi install` succeeded (the path passed absolute) and named in `replaced`
+      and `warnings`; an unrelated package is left alone; a project's `.pi/settings.json` is
+      untouched.
+- [ ] **§S2** With an `npm:sol-pi` entry present, a `pi install` exiting 1 leaves that entry
+      registered, runs no `pi remove`, and the `failed` envelope reports the registration state.
+- [ ] **§S2** A version of `0.1.0.dev3` fails before any `pi` command, naming the version.
+- [ ] **§S2** A stub `pi` that records the source in another directory's `settings.json` makes the
+      run fail, naming the directory read.
+- [ ] **§S2** Against the real `pi` of the development dependency (through `$PI_BIN`) and a temporary
+      agent directory, with no network: a local-path source registered by `pi install` is found as
+      a SoL-Pi source and removed by `uninstall` from another working directory.
 - [ ] **§S2** An existing valid `sol-pi.json` is kept byte for byte, with value flags named as not
       applied; an invalid one is kept and named; a missing reducer default with no `--reducer`
       fails before any `pi` command runs.
@@ -188,8 +219,8 @@ records its arguments and edits `settings.json` the way `pi install` and `pi rem
       `rehearse` have `id-token: write`; the publish guards check `origin/main`; `test-bun` pins
       Bun 1.4.4 and runs `bun test --timeout 30000`; `test-python` installs the project before its
       discovery; `create-release` checks `pypi:.` and `npm:.`.
-- [ ] **§S5** Run against the rendered workflow with the same stacks and targets, the test's
-      differences are exactly §S5's hand edits.
+- [ ] **§S5** Against the committed rendering, `release.yml`'s differences are exactly §S5's hand
+      edits.
 - [ ] **§S6** README and `agents-install.md` cover §S6's items, checked by
       `tests/install-guide.test.ts`; neither installs SoL-Pi from a checkout path;
       `CHANGELOG.md` `[Unreleased]` records the changes.
@@ -197,9 +228,10 @@ records its arguments and edits `settings.json` the way `pi install` and `pi rem
 
 ## Estimated size
 
-8 points. The npm package's metadata and pack check, two verbs that drive `pi` through a stub, the
-recognition of earlier SoL-Pi sources, the home view's extension state, the rendered workflow with
-its hand edits and a test that pins them, and the install docs.
+8 points. The npm package's metadata and pack check, two verbs that drive `pi` through a stub and
+one real-Pi round trip, the recognition and safe replacement of earlier SoL-Pi sources, the home
+view's extension state, the rendered workflow with its hand edits and a test that pins them, and
+the install docs.
 
 ## Risks
 
