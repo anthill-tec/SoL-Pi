@@ -13,6 +13,11 @@ All notable changes to this project are documented in this file. The format is b
   `scripts/check-pi-compat.mjs --strict` passes on it, and its mixed-internal-packages warning now
   follows every internal Pi package reachable through Pi's own (such as `pi-schema`) and advises
   installing Pi 1.5.0. `docs/compatibility.md` reviews the Pi 1.4 and 1.5 changes SoL-Pi meets.
+- Action Fusion's `edit` and `write` tell the model when to use `then_run`: each keeps Pi's own
+  prompt snippet and guidelines and adds a `then_run` clause to the snippet and three guidelines
+  (use it for a command that finishes, leave it out when the result must be read first or the
+  command keeps running, and fix forward after a non-zero exit). The `then_run` descriptions'
+  examples now read "run, build, test, check, install, or restart a service".
 
 ### Security
 
