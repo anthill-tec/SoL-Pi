@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: MIT
 """The golden written files (`tests/fixtures/sol-pi-config/written.json` lists each with its fixed
-inputs): `run_setup` writes exactly their bytes, and `render_config` renders exactly them.
+inputs): `run_setup` writes exactly their bytes, `sol-pi-axi setup` writes them from the flags,
+and `render_config` renders exactly them.
 `tests/sol-pi-config-conformance.test.ts` accepts each through `loadSolPiConfig` and
 `scripts/check-sol-pi-config.mjs`."""
 
@@ -9,7 +10,16 @@ import os
 import re
 import unittest
 
-from tests.sol_pi_axi_support import FIXTURES, TempTree, feature_keys, import_sut
+from tests.sol_pi_axi_support import (
+    FIXTURES,
+    TempTree,
+    assert_clean_streams,
+    cli_environ,
+    decode_envelope,
+    feature_keys,
+    import_sut,
+    run_cli,
+)
 
 GOLDENS = json.loads((FIXTURES / "written.json").read_text(encoding="utf-8"))["cases"]
 
@@ -62,6 +72,26 @@ def _make_test(case: dict):
 
     test.__doc__ = f"{case['name']}: {case['note']}"
     return test
+
+
+class CommandLineGoldenTest(unittest.TestCase):
+    """The real command line, flags to bytes: `sol-pi-axi setup <project> <args>` writes exactly
+    each golden file's bytes."""
+
+    def test_the_command_line_writes_every_golden_files_bytes(self):
+        for case in GOLDENS:
+            with self.subTest(case=case["name"]):
+                tree = TempTree()
+                self.addCleanup(tree.cleanup)
+                if case["piSettings"] is not None:
+                    tree.write_settings(case["piSettings"])
+                result = run_cli(["setup", tree.project, *case["args"]], tree=tree,
+                                 env=cli_environ(tree))
+                assert_clean_streams(self, result)
+                self.assertEqual(result.returncode, 0, f"{result.stdout}\n{result.stderr}")
+                self.assertEqual(decode_envelope(self, result.stdout)["outcome"], "written")
+                self.assertEqual(tree.project_file.read_bytes(),
+                                 (FIXTURES / case["file"]).read_bytes())
 
 
 for _case in GOLDENS:
