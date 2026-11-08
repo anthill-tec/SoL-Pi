@@ -9,6 +9,8 @@ import json
 import os
 import re
 import shutil
+import subprocess
+import sys
 import tempfile
 from pathlib import Path
 
@@ -112,6 +114,72 @@ def snapshot(*roots: Path) -> dict:
             else:
                 state[str(path)] = ("file", path.read_bytes(), info.st_mode, info.st_mtime_ns)
     return state
+
+
+#: The environment variable naming the signal tests' hold file (the writing module's test-only
+#: hook, reached through the command line). When it is non-empty, a `setup` run that is about to
+#: rename its temporary file over the target first writes the temporary file's absolute path and
+#: a newline to the named file, then waits — polling, the temporary file still in place — until
+#: the named file no longer exists, and only then renames. Unset or empty, nothing is held.
+HOLD_ENV = "SOL_PI_AXI_TEST_HOLD"
+
+#: Text that must never reach either stream of a `sol-pi-axi` run: a traceback or a dependency
+#: (import) message.
+FORBIDDEN_OUTPUT = ("Traceback", "No module named", "ModuleNotFoundError", "ImportError")
+
+
+def venv_script() -> Path:
+    """The `sol-pi-axi` console script of the editable install the tests run under."""
+    script = Path(sys.executable).parent / "sol-pi-axi"
+    if not script.is_file():
+        raise AssertionError(f"no sol-pi-axi console script beside {sys.executable}")
+    return script
+
+
+def cli_environ(tree: "TempTree", **extra: str) -> dict:
+    """A clean environment for a `sol-pi-axi` run: `PATH`, the tree's home as `HOME`, its agent
+    directory as `PI_CODING_AGENT_DIR`, a UTF-8 locale, coverage's own variables, then `extra`."""
+    environ = {
+        "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
+        "HOME": str(tree.home),
+        "PI_CODING_AGENT_DIR": str(tree.agent),
+        "LANG": "C.UTF-8",
+    }
+    environ.update({key: value for key, value in os.environ.items() if key.startswith("COVERAGE")})
+    environ.update(extra)
+    return environ
+
+
+def run_cli(args, *, tree: "TempTree", cwd=None, env=None, stdin=subprocess.DEVNULL,
+            script=None, timeout: float = 60) -> subprocess.CompletedProcess:
+    """Run the `sol-pi-axi` console script (the editable install's unless `script` is given) as a
+    subprocess, capturing both streams as text."""
+    command = [str(script if script is not None else venv_script()), *[str(arg) for arg in args]]
+    return subprocess.run(command, cwd=str(cwd if cwd is not None else tree.root),
+                          env=env if env is not None else cli_environ(tree), stdin=stdin,
+                          capture_output=True, text=True, timeout=timeout, check=False)
+
+
+def assert_clean_streams(test, result) -> None:
+    """Neither stream carries a traceback or a dependency message."""
+    for name, text in (("stdout", result.stdout), ("stderr", result.stderr)):
+        for marker in FORBIDDEN_OUTPUT:
+            test.assertNotIn(marker, text or "", f"{marker!r} on {name}:\n{text}")
+
+
+def decode_envelope(test, stdout: str) -> dict:
+    """The `axi` object of a TOON envelope, decoded with `toon_format.decode`; the whole of
+    standard output must be that one envelope."""
+    toon_format = importlib.import_module("toon_format")
+    try:
+        decoded = toon_format.decode(stdout)
+    except Exception as error:  # noqa: BLE001 — any decode failure is the assertion
+        raise test.failureException(
+            f"stdout is not a TOON envelope ({type(error).__name__}: {error}):\n{stdout}") from None
+    test.assertIsInstance(decoded, dict, stdout)
+    test.assertEqual(list(decoded), ["axi"], f"the envelope's root must be axi:\n{stdout}")
+    test.assertIsInstance(decoded["axi"], dict, stdout)
+    return decoded["axi"]
 
 
 class TempTree:
