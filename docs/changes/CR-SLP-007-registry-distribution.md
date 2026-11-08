@@ -1,6 +1,6 @@
 # CR-SLP-007 — `@anthill-tec/sol-pi` on npm, `sol-pi-axi install`/`uninstall`, publishing
 
-**Status:** PENDING · Pre-review: ran — touches another project's surface (Model B's install contract, #1554); 8 points or more
+**Status:** COMPLETED · Pre-review: ran — touches another project's surface (Model B's install contract, #1554); 8 points or more
 **Type:** feature
 **Priority:** P1 — 0.1.0 is the first release Model B installs
 **Depends on:** CR-SLP-004, CR-SLP-002, CR-SLP-001
