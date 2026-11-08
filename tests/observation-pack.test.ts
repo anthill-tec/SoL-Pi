@@ -25,13 +25,22 @@ import {
 	type ExtensionFactory,
 } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "bun:test";
 import {
 	createObservationPackExtension,
 	FULL_SENDS,
 	THRESHOLD_BYTES,
 } from "../src/sol-pi/extensions/observation-pack/index.ts";
-import { componentText, FakePi, FakeSessionManager, fakeContext, fakeToolContext, plainTheme } from "./helpers.ts";
+import {
+	componentText,
+	FakePi,
+	FakeSessionManager,
+	fakeContext,
+	fakeToolContext,
+	plainTheme,
+	settleWorkerExits,
+	trackWorkerExits,
+} from "./helpers.ts";
 import { runtimeRoot } from "../src/sol-pi/runtime-paths.ts";
 
 const roots: string[] = [];
@@ -65,6 +74,7 @@ function canCreateSymlinks(): Promise<boolean> {
 	})();
 	return symlinkSupport;
 }
+const symlinksSupported = await canCreateSymlinks();
 
 function observationPackPi(): FakePi {
 	const pi = new FakePi();
@@ -365,8 +375,7 @@ describe("observation pack", () => {
 		expect(projected[2]).toMatch(new RegExp(`id: ${id}`, "u"));
 	});
 
-	it("fails recall closed when an object path is replaced by a symlink", async (ctx) => {
-		if (!(await canCreateSymlinks())) ctx.skip();
+	it.skipIf(!symlinksSupported)("fails recall closed when an object path is replaced by a symlink", async () => {
 		const sessionDir = await sessionRoot();
 		const body = `stored\n${repeatPastThreshold("observation bytes\n")}`;
 		const message = toolResult(body);
@@ -411,8 +420,7 @@ describe("observation pack", () => {
 		expect(Buffer.from(recalled, "utf8")).toEqual(Buffer.from(body, "utf8"));
 	});
 
-	it("fails storage closed when the observation directory is a symlink", async (ctx) => {
-		if (!(await canCreateSymlinks())) ctx.skip();
+	it.skipIf(!symlinksSupported)("fails storage closed when the observation directory is a symlink", async () => {
 		const sessionDir = await sessionRoot();
 		const targetDir = await sessionRoot();
 		await mkdir(join(sessionDir, "sol-pi", SESSION_ID, "observation-pack"), { recursive: true });
@@ -638,7 +646,7 @@ function expectRealSessionPacking(run: Awaited<ReturnType<typeof runRealSession>
 		request.forEach((message, index) => {
 			if (message.role !== "system") return;
 			expect(withoutDeclarations(message)).toEqual(withoutDeclarations(run.stored[index]!));
-			if (requestIndex >= 2) expect(message).toEqual(finalRequest[index]);
+			if (requestIndex >= 2) expect(message).toEqual(finalRequest[index]!);
 		});
 	});
 	// Pi 1.0 records a leading system message and a tool-declaration delta; Pi 0.84 neither.
@@ -658,6 +666,9 @@ describe("observation pack in a real Pi session", () => {
 });
 
 describe.skipIf(createCodemodeExtension === undefined)("observation pack with Pi codemode", () => {
+	beforeEach(trackWorkerExits);
+	afterEach(settleWorkerExits);
+
 	it('packs a codemode script result and recalls from a script in codemode "only" mode', async () => {
 		const body = `codemode only\n${repeatPastThreshold("script line\n")}`;
 		expectRealSessionPacking(await runRealSession("only", body), body, true);

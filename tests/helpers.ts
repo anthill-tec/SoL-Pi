@@ -9,6 +9,7 @@ import { readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { Worker } from "node:worker_threads";
 
 type Handler = (event: unknown, context: ExtensionContext) => unknown | Promise<unknown>;
 
@@ -272,4 +273,31 @@ export function piCliPath(): string {
 	const bin = typeof manifest.bin === "string" ? manifest.bin : manifest.bin?.pi;
 	if (!bin) throw new Error("@earendil-works/pi-coding-agent declares no pi bin");
 	return join(root, bin);
+}
+
+const workerExits: Promise<unknown>[] = [];
+let originalTerminate: Worker["terminate"] | undefined;
+
+/**
+ * Records the exit of every worker thread terminated from now on. Pi counts each codemode worker
+ * against a process-wide limit until the worker exits, which on Bun can come after the script's
+ * result. `bun test` runs every file in one process, so a worker still exiting when a codemode test
+ * ends would count against the next codemode test.
+ */
+export function trackWorkerExits(): void {
+	if (originalTerminate) return;
+	const terminate = Worker.prototype.terminate;
+	originalTerminate = terminate;
+	Worker.prototype.terminate = function (this: Worker) {
+		const exited = terminate.call(this);
+		workerExits.push(exited.catch(() => undefined));
+		return exited;
+	};
+}
+
+/** Waits until every worker terminated since `trackWorkerExits` has exited, then stops recording. */
+export async function settleWorkerExits(): Promise<void> {
+	while (workerExits.length > 0) await Promise.all(workerExits.splice(0));
+	if (originalTerminate) Worker.prototype.terminate = originalTerminate;
+	originalTerminate = undefined;
 }

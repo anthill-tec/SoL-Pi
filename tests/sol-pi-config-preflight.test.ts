@@ -7,7 +7,7 @@ import { spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 
 const SCRIPT = join(process.cwd(), "scripts/check-sol-pi-config.mjs");
 
@@ -30,7 +30,7 @@ function writeConfig(value: unknown): string {
 function run(config: string, requireAllEnabled = true) {
 	const args = [SCRIPT, "--config", config];
 	if (requireAllEnabled) args.push("--require-all-enabled");
-	return spawnSync(process.execPath, args, {
+	return spawnSync("node", args, {
 		cwd: process.cwd(),
 		encoding: "utf8",
 	});

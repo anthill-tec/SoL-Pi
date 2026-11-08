@@ -4,7 +4,7 @@
  */
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import { estimateTokens, type CompactOptions, type ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "bun:test";
 import {
 	BOUNDARY_COMPACTION_INSTRUCTIONS,
 	createOnlineContextCompactExtension,
@@ -20,7 +20,7 @@ import {
 	resolveCompactionTokenSettings,
 } from "../src/sol-pi/extensions/online-context-compact/extension.ts";
 import { appendOnlineState, initialOnlineState, restoreOnlineState } from "../src/sol-pi/extensions/online-context-compact/state.ts";
-import { FakePi, FakeSessionManager, fakeContext } from "./helpers.ts";
+import { FakePi, FakeSessionManager, fakeContext, waitFor } from "./helpers.ts";
 
 const OPEN = [{ id: "build", goal: "build it", status: "in_progress" }] as const;
 const DONE = [{ id: "build", goal: "build it", status: "completed" }] as const;
@@ -274,7 +274,7 @@ describe("Online Context Compact extension", () => {
 		expect(await pi.emitContext(messages, context)).toEqual(messages);
 	});
 
-	it.each([0, 3])("records real progress on the first plan update after compaction, following %s work requests", async (workRequests) => {
+	it.each([[0], [3]])("records real progress on the first plan update after compaction, following %s work requests", async (workRequests) => {
 		const manager = new FakeSessionManager();
 		const pi = new FakePi(manager);
 		appendOnlineState(pi.asExtensionApi(), {
@@ -396,7 +396,7 @@ describe("Online Context Compact extension", () => {
 		expect(compact).not.toHaveBeenCalled();
 	});
 
-	it.each([false, true])("preserves existing debt during unrelated native compaction (fromExtension=%s)", async (fromExtension) => {
+	it.each([[false], [true]])("preserves existing debt during unrelated native compaction (fromExtension=%s)", async (fromExtension) => {
 		const manager = new FakeSessionManager();
 		const pi = new FakePi(manager);
 		appendOnlineState(pi.asExtensionApi(), {
@@ -527,10 +527,10 @@ describe("Online Context Compact extension", () => {
 			const firstSettlement = pi.emit("agent_settled", { type: "agent_settled" }, context).then(() => {
 				firstSettlementFinished = true;
 			});
-			await vi.waitFor(() => expect(compactCalls).toHaveLength(1));
+			await waitFor(() => expect(compactCalls).toHaveLength(1));
 			expect(await pi.emit("session_before_tree", { type: "session_before_tree" }, context)).toEqual({ cancel: true });
 			harness.finishCompaction();
-			await vi.waitFor(() => expect(pi.sentMessages).toHaveLength(1));
+			await waitFor(() => expect(pi.sentMessages).toHaveLength(1));
 
 			expect(compactCalls).toHaveLength(1);
 			expect(compactCalls[0]?.customInstructions).toBe(BOUNDARY_COMPACTION_INSTRUCTIONS);
@@ -580,9 +580,9 @@ describe("Online Context Compact extension", () => {
 				() => undefined,
 				(error: unknown) => error,
 			);
-			await vi.waitFor(() => expect(harness.compactCalls).toHaveLength(1));
+			await waitFor(() => expect(harness.compactCalls).toHaveLength(1));
 			harness.finishCompaction(new Error("summary provider unavailable"));
-			await vi.waitFor(() => expect(pi.sentMessages).toHaveLength(1));
+			await waitFor(() => expect(pi.sentMessages).toHaveLength(1));
 			expect(pi.sentMessages[0]).toEqual({
 				message: {
 					customType: "sol-pi-online-context-compact",
@@ -604,7 +604,7 @@ describe("Online Context Compact extension", () => {
 		it(`does not resume after a cancelled boundary compaction (${error.message})`, async () => {
 			const harness = await boundaryHarness("synchronous");
 			const settlement = harness.pi.emit("agent_settled", { type: "agent_settled" }, harness.context);
-			await vi.waitFor(() => expect(harness.compactCalls).toHaveLength(1));
+			await waitFor(() => expect(harness.compactCalls).toHaveLength(1));
 			harness.finishCompaction(error);
 			await settlement;
 			expect(onlineReminders(harness.pi)).toEqual([]);
@@ -627,11 +627,11 @@ describe("Online Context Compact extension", () => {
 		expect(await pi.emit("session_before_compact", { ...threshold, reason: "manual" }, context)).toBeUndefined();
 
 		const settlement = pi.emit("agent_settled", { type: "agent_settled" }, context);
-		await vi.waitFor(() => expect(harness.compactCalls).toHaveLength(1));
+		await waitFor(() => expect(harness.compactCalls).toHaveLength(1));
 		// The selection is consumed once its own compaction starts.
 		expect(await pi.emit("session_before_compact", threshold, context)).toBeUndefined();
 		harness.finishCompaction();
-		await vi.waitFor(() => expect(pi.sentMessages).toHaveLength(1));
+		await waitFor(() => expect(pi.sentMessages).toHaveLength(1));
 		harness.setIdle(true);
 		await pi.emit("agent_settled", { type: "agent_settled" }, context);
 		await settlement;

@@ -17,7 +17,7 @@ import {
 	type AgentSession,
 } from "@earendil-works/pi-coding-agent";
 import { fauxAssistantMessage, fauxProvider, fauxToolCall } from "@earendil-works/pi-ai/providers/faux";
-import { expect, it } from "vitest";
+import { expect, it } from "bun:test";
 import { DEFAULT_CONFIG } from "../src/sol-pi/config.ts";
 import { piCliPath } from "./helpers.ts";
 
@@ -122,7 +122,7 @@ it.each([
 	}
 }, 30_000);
 
-it.each([false, true])("starts and shuts down the offline RPC CLI without a prompt (all enabled: %s)", async (allEnabled) => {
+it.each([[false], [true]])("starts and shuts down the offline RPC CLI without a prompt (all enabled: %s)", async (allEnabled) => {
 	const cwd = await mkdtemp(join(tmpdir(), "sol-pi-rpc-startup-"));
 	try {
 		const agentDir = join(cwd, "agent");
@@ -135,7 +135,7 @@ it.each([false, true])("starts and shuts down the offline RPC CLI without a prom
 			evidencePreservingReducer: allEnabled,
 			onlineContextCompact: allEnabled,
 		}));
-		const running = promisify(execFile)(process.execPath, [
+		const running = promisify(execFile)("node", [
 			piCliPath(), "--offline", "--approve", "--no-session", "--mode", "rpc",
 			"--no-extensions", "--no-skills", "--no-prompt-templates", "--no-themes", "--no-context-files",
 			"-e", join(process.cwd(), "src/sol-pi/index.ts"),
@@ -195,7 +195,7 @@ export default function (pi) {
 	});
 }
 `);
-		const running = promisify(execFile)(process.execPath, [
+		const running = promisify(execFile)("node", [
 			piCliPath(), "--offline", "--approve", "--no-session",
 			"--no-extensions", "--no-skills", "--no-prompt-templates", "--no-themes",
 			"-e", join(process.cwd(), "src/sol-pi/index.ts"), "-e", providerPath,
