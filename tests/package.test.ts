@@ -555,12 +555,8 @@ describe("npm package @anthill-tec/sol-pi", () => {
 		expect(manifest.name).toBe("@anthill-tec/sol-pi");
 		expect("private" in manifest).toBe(false);
 		expect(manifest.publishConfig).toEqual({ access: "public" });
-		const repository = manifest.repository;
-		if (typeof repository === "string") {
-			expect(repository).toBe("https://github.com/anthill-tec/SoL-Pi");
-		} else {
-			expect(repository).toEqual({ type: "git", url: "https://github.com/anthill-tec/SoL-Pi" });
-		}
+		// npm's normalised form, so `npm publish` corrects nothing.
+		expect(manifest.repository).toEqual({ type: "git", url: "git+https://github.com/anthill-tec/SoL-Pi.git" });
 		expect(manifest.keywords).toContain("pi-package");
 	});
 
