@@ -33,18 +33,25 @@ includes, `!` excludes, `+`/`-` exact overrides), so only the extension itself c
 
 **Surfaces:** `sol_pi_axi/` (a new check module).
 
-- **Pi's record.** The check fails when no SoL-Pi source (CR-SLP-007 §S2) is registered, or when
-  the package is not on disk (`<agent dir>/npm/node_modules/@anthill-tec/sol-pi/package.json` for
-  the npm source; the path's `package.json` for a local path). `error` names which.
+- **Pi's record.** The check fails, before starting Pi, when no SoL-Pi source (CR-SLP-007 §S2) is
+  registered; when more than one is; when the one registered is neither an
+  `npm:@anthill-tec/sol-pi` source nor a local path (an `npm:sol-pi`, `git:` or URL source:
+  `help[]` names `sol-pi-axi install`, which replaces it); or when its package is not on disk. The
+  package directory is `<agent dir>/npm/node_modules/@anthill-tec/sol-pi` for the npm source and
+  the resolved path for a local path; on disk means its `package.json` exists. `error` names which.
 - **Starting Pi.** `pi --offline --no-approve --mode rpc --no-session`, from the user's home, with
   `SOL_PI_AXI_VERIFY` set to a value unique to the run and one
   `{"id":"sol-pi-axi","type":"get_state"}` line on standard input, then end of input; bounded at 30
   seconds, after which Pi is killed and reaped.
 - **Fails when** Pi exits non-zero (`error` quotes its `Failed to load extension` line), an
-  `extension_error` line's `extensionPath` lies inside the SoL-Pi package directory, no
-  `get_state` response arrives, or no notify line carries the run's value (`error`: Pi started
-  without loading SoL-Pi, for example because a resource filter in `settings.json` excludes it).
-  Non-JSON standard-output lines are ignored.
+  `extension_error` line's `extensionPath` lies inside the SoL-Pi package directory (both sides
+  compared with symbolic links resolved), no `get_state` response arrives, or no notify line
+  carries the run's value (`error`: Pi started without loading SoL-Pi, for example because a
+  resource filter in `settings.json` excludes it). Non-JSON standard-output lines are ignored.
+- **A dialog blocks the start.** Pi reads no input until `session_start` finishes, so an extension
+  that opens a dialog there (`select`, `confirm`, `input`, `editor`) holds Pi until the bound. When
+  the bound kills Pi after a dialog `extension_ui_request` was seen, `error` names the dialog's
+  `method` and `title` and says Pi does not name the extension that opened it.
 - An `extension_error` from another extension is a warning.
 - **Result:** `verify`: `ok` (boolean), `loaded` (boolean, the load signal seen), `exit` (Pi's exit
   code, `null` when it was killed or not started), `errors` (list of
@@ -80,7 +87,9 @@ includes, `!` excludes, `+`/`-` exact overrides), so only the extension itself c
 - README and `agents-install.md` document `verify`, the check in `install`, what fails it, the
   `verify` key, and that Pi may create `auth.json` and `models-store.json` in the agent directory.
 - README, `agents-install.md` and `docs/configuration.md` say the extension reads one environment
-  variable, `SOL_PI_AXI_VERIFY`, only to answer `sol-pi-axi verify`.
+  variable, `SOL_PI_AXI_VERIFY`, only to answer `sol-pi-axi verify`, in place of their statement
+  that it reads none; `CHANGELOG.md`'s `[Unreleased]` statement that it reads none is corrected the
+  same way.
 - `CHANGELOG.md` `[Unreleased]` records `verify`, the check and the load signal.
 
 ## Acceptance criteria
@@ -106,9 +115,14 @@ stub `pi` to answer `--mode rpc`.
       path.
 - [ ] **§S2** Real Pi: a trusted home whose `~/.pi/settings.json` registers a throwing extension
       gives `verified`.
-- [ ] **§S2** No SoL-Pi entry, and an npm entry with no package directory, each fail with exit 1
-      before any `--mode rpc` start (the stub records none), `error` naming the cause; no SoL-Pi entry
-      has `sol-pi-axi install` in `help[]`.
+- [ ] **§S2** No SoL-Pi entry, two SoL-Pi entries, an `npm:sol-pi` entry, a `git:` entry naming
+      `anthill-tec/SoL-Pi`, and an `npm:@anthill-tec/sol-pi` entry with no package directory each
+      fail with exit 1 before any `--mode rpc` start (the stub records none), `error` naming the
+      cause; no SoL-Pi entry, `npm:sol-pi` and `git:` have `sol-pi-axi install` in `help[]`.
+- [ ] **§S2** Real Pi: the checkout registered through a symbolic link, with `{"version":2}`, fails
+      with the `session_start` error in `verify.errors` (not a warning).
+- [ ] **§S2** Stub: an RPC start that emits a `confirm` dialog request and never answers fails after
+      the bound, `error` naming `confirm` and the dialog's title.
 - [ ] **§S2** Stub: an RPC start that never answers fails after the bound with `verify.exit` `null`
       and no `pi` process left; non-JSON standard-output lines are ignored; a notify carrying another
       run's value does not count as loaded.
@@ -121,8 +135,11 @@ stub `pi` to answer `--mode rpc`.
 - [ ] **§S4** `git grep -n -- '--mode rpc' sol_pi_axi/` returns at least one non-test line, called
       from both `verify` and `install`.
 - [ ] **§S5** `tests/install-guide.test.ts` checks README and `agents-install.md` for `verify` and
-      the check, and README, `agents-install.md` and `docs/configuration.md` for
-      `SOL_PI_AXI_VERIFY`; `CHANGELOG.md` `[Unreleased]` names `verify`, the check and the signal.
+      the check; its case on what the extension reads is rewritten to require, in README,
+      `agents-install.md` and `docs/configuration.md`, the one-variable statement naming
+      `SOL_PI_AXI_VERIFY` and no statement that the extension reads no environment variables;
+      `CHANGELOG.md` `[Unreleased]` names `verify`, the check and the signal, and no longer says the
+      extension reads no environment variables.
 - [ ] **Gate** The Bun and the Python `pre-merge-gate` both pass.
 
 ## Estimated size
