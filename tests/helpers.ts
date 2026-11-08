@@ -302,7 +302,7 @@ export interface WaitForOptions {
 }
 
 /**
- * Vitest's `vi.waitFor` contract: calls `callback` until it returns (or resolves) without
+ * Vitest's waitFor contract: calls `callback` until it returns (or resolves) without
  * throwing, every `interval` ms for at most `timeout` ms, and resolves to its value; on timeout it
  * rejects with the callback's last error. It polls on real time even while fake timers are
  * installed.
