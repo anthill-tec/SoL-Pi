@@ -4,6 +4,8 @@
 
 Not a test module (its name does not match `test_*.py`)."""
 
+from __future__ import annotations
+
 import importlib
 import json
 import os
@@ -136,7 +138,7 @@ def venv_script() -> Path:
     return script
 
 
-def cli_environ(tree: "TempTree", **extra: str) -> dict:
+def cli_environ(tree: TempTree, **extra: str) -> dict:
     """A clean environment for a `sol-pi-axi` run: `PATH`, the tree's home as `HOME`, its agent
     directory as `PI_CODING_AGENT_DIR`, a UTF-8 locale, coverage's own variables, then `extra`."""
     environ = {
@@ -150,7 +152,7 @@ def cli_environ(tree: "TempTree", **extra: str) -> dict:
     return environ
 
 
-def run_cli(args, *, tree: "TempTree", cwd=None, env=None, stdin=subprocess.DEVNULL,
+def run_cli(args, *, tree: TempTree, cwd=None, env=None, stdin=subprocess.DEVNULL,
             script=None, timeout: float = 60) -> subprocess.CompletedProcess:
     """Run the `sol-pi-axi` console script (the editable install's unless `script` is given) as a
     subprocess, capturing both streams as text."""

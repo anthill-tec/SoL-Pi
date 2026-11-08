@@ -266,8 +266,8 @@ def _setup(command: dict) -> tuple[dict, int]:
     help_steps = []
     if result.outcome == "written":
         help_steps = [f"cd {_quote(project)} && pi",
-                      "in Pi, run /trust to trust the project, so the extensions read "
-                      ".pi/sol-pi.json"]
+                      ("in Pi, run /trust to trust the project, so the extensions read "
+                       ".pi/sol-pi.json")]
     envelope.update(ok=True, outcome=result.outcome, path=str(result.path),
                     config=_summary(values), warnings=list(result.warnings), help=help_steps)
     return envelope, 0

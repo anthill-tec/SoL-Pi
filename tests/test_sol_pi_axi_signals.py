@@ -30,6 +30,10 @@ from tests.sol_pi_axi_support import (
 
 EXIT_CODES = {signal.SIGINT: 130, signal.SIGTERM: 143, signal.SIGHUP: 129}
 HOLD_TIMEOUT = 30.0
+#: Ignores `SIGINT`, then replaces itself with `argv[1:]`: an ignored disposition survives the
+#: exec, so the command starts with `SIGINT` ignored (without `preexec_fn`, unsafe with threads).
+IGNORE_SIGINT_THEN_EXEC = ("import os, signal, sys; signal.signal(signal.SIGINT, signal.SIG_IGN); "
+                           "os.execv(sys.argv[1], sys.argv[1:])")
 #: The file the slowed `toon_format` (`SLOW_TOON_FORMAT`) holds its import on.
 IMPORT_HOLD_ENV = "SOL_PI_AXI_TEST_IMPORT_HOLD"
 #: A `toon_format` put first on `PYTHONPATH`: its import writes `held` and a newline to the file
@@ -86,11 +90,13 @@ class HeldRunTestCase(unittest.TestCase):
     def start_held(self, *args, ignore_sigint: bool = False) -> tuple[subprocess.Popen, Path]:
         """Start `sol-pi-axi <args>` with the hook holding it; returns the process and the
         temporary file the hook reported, once the run is held."""
-        preexec = (lambda: signal.signal(signal.SIGINT, signal.SIG_IGN)) if ignore_sigint else None
+        command = [str(venv_script()), *[str(arg) for arg in args]]
+        if ignore_sigint:
+            command = [sys.executable, "-c", IGNORE_SIGINT_THEN_EXEC, *command]
         process = subprocess.Popen(
-            [str(venv_script()), *[str(arg) for arg in args]], cwd=self.tree.root,
+            command, cwd=self.tree.root,
             env=cli_environ(self.tree, **{HOLD_ENV: str(self.hold)}), stdin=subprocess.DEVNULL,
-            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, preexec_fn=preexec)
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         self.addCleanup(self._reap, process)
         deadline = time.monotonic() + HOLD_TIMEOUT
         while True:
