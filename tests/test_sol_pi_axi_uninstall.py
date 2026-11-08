@@ -137,7 +137,16 @@ def development_pi() -> Path:
 
 class UninstallRealPiTest(UninstallTestCase):
     """§S2 with the real Pi: Pi stores a local path relative to the agent directory and resolves
-    a `pi remove` argument against the working directory."""
+    a `pi remove` argument against the working directory.
+
+    The agent directory is nested three levels below the root while home sits one level below
+    it, so the relative path Pi records names a different place when resolved against home: Pi
+    itself fails the removal unless the argument is the absolute path."""
+
+    def setUp(self):
+        super().setUp()
+        self.tree.agent = self.tree.root / "deep" / "er" / "agent"
+        self.tree.agent.mkdir(parents=True)
 
     def test_a_local_path_registered_by_real_pi_is_removed_from_another_working_directory(self):
         pi = development_pi()
@@ -152,13 +161,13 @@ class UninstallRealPiTest(UninstallTestCase):
                                     cwd=self.tree.home, env=environ, stdin=subprocess.DEVNULL,
                                     capture_output=True, text=True, timeout=120, check=False)
         self.assertEqual(registered.returncode, 0, registered.stderr)
-        self.assertEqual(read_packages(self.tree.agent), ["../checkout"], "Pi's own record")
+        self.assertEqual(read_packages(self.tree.agent), ["../../../checkout"], "Pi's own record")
 
         elsewhere = self.tree.root / "elsewhere" / "deeper"
         elsewhere.mkdir(parents=True)
         result = self.sol("uninstall", cwd=elsewhere, env=environ)
         envelope = self.assert_envelope(result, "removed", 0)
-        self.assertEqual(envelope["removed"], ["../checkout"])
+        self.assertEqual(envelope["removed"], ["../../../checkout"])
         self.assertEqual(read_packages(self.tree.agent), [])
         self.assertTrue((checkout / "package.json").is_file(), "the checkout itself was touched")
 
