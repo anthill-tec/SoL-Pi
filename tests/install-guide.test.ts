@@ -82,9 +82,10 @@ describe("agent installation instructions", () => {
 	});
 
 	it("installs the latest tested Pi and names every tested Pi version", () => {
-		const versions = testedPiVersions();
-		const latest = versions.at(-1);
-		expect(versions.length).toBeGreaterThan(1);
+		// Pi 1.5.0 joins the tested set as its latest release, the default install (CR-SLP-002 §S2, §S4).
+		const versions = ["0.84.2", "1.0.4", "1.3.0", "1.5.0"];
+		const latest = "1.5.0";
+		expect(testedPiVersions()).toEqual(versions);
 		// The development dependency is the newest tested Pi.
 		const manifest = JSON.parse(rootFile("package.json")) as { devDependencies: Record<string, string> };
 		expect(manifest.devDependencies["@earendil-works/pi-coding-agent"]).toBe(latest);
@@ -101,6 +102,11 @@ describe("agent installation instructions", () => {
 		expect(readme).toContain(bunInstall);
 		expect(readme).toContain(readmeNpmInstall);
 		expect(readme.indexOf(bunInstall)).toBeLessThan(readme.indexOf(readmeNpmInstall));
+		// Pi 1.3.0 stays tested but is no longer the default install.
+		for (const doc of [guide, readme]) {
+			expect(doc).not.toContain("bun add --global @earendil-works/pi-coding-agent@1.3.0");
+			expect(doc).not.toMatch(/npm install --global (--ignore-scripts )?@earendil-works\/pi-coding-agent@1\.3\.0/u);
+		}
 		// The README lists Bun 1.4.4 as a prerequisite, uses the Bun development commands, and
 		// documents the compatibility check for both global Pi locations.
 		expect(readme).toContain("Bun 1.4.4");
@@ -114,6 +120,12 @@ describe("agent installation instructions", () => {
 			expect(readme).toContain(version);
 			expect(rootFile("docs/compatibility.md")).toContain(version);
 			expect(rootFile("THIRD_PARTY_NOTICES.md")).toContain(version);
+		}
+		// The notices table lists the four Pi packages at the development dependency, 1.5.0.
+		const notices = rootFile("THIRD_PARTY_NOTICES.md");
+		for (const name of ["pi-agent-core", "pi-ai", "pi-coding-agent", "pi-tui"]) {
+			const rows = notices.match(new RegExp(`^\\| \`@earendil-works/${name}\` \\| [^|]+ \\|`, "gmu")) ?? [];
+			expect(rows, name).toEqual([`| \`@earendil-works/${name}\` | ${latest} |`]);
 		}
 	});
 
