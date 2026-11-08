@@ -7,7 +7,7 @@
  * each through a real Pi AgentSession on the development dependency: tool argument validation and
  * coercion by pi-schema, extension update changelogs, and the codemode worker queue.
  */
-import { cp, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fauxAssistantMessage, fauxProvider, fauxToolCall } from "@earendil-works/pi-ai/providers/faux";
@@ -326,6 +326,17 @@ describe("Pi 1.5.0 codemode worker queue", () => {
 	beforeEach(trackWorkerExits);
 	afterEach(settleWorkerExits);
 
+	// Pi reads PI_CODEMODE_MAX_WORKERS on every script; pin Pi's default of two workers for these tests.
+	let maxWorkers: string | undefined;
+	beforeEach(() => {
+		maxWorkers = process.env.PI_CODEMODE_MAX_WORKERS;
+		delete process.env.PI_CODEMODE_MAX_WORKERS;
+	});
+	afterEach(() => {
+		if (maxWorkers === undefined) delete process.env.PI_CODEMODE_MAX_WORKERS;
+		else process.env.PI_CODEMODE_MAX_WORKERS = maxWorkers;
+	});
+
 	it("completes fused writes from more parallel scripts than codemode has workers", async () => {
 		expect(createCodemodeExtension).toBeDefined();
 		const cwd = await tempDir("sol-pi-codemode-queue-");
@@ -391,6 +402,11 @@ describe("Pi 1.5.0 codemode worker queue", () => {
 				expect(textOf(result)).not.toMatch(/free codemode worker/u);
 				expect(await readFile(join(cwd, `${name}.txt`), "utf8")).toBe(`${name}\n`);
 			}
+			// A script writes its file only once it holds a worker, and holds it through its half-second
+			// then_run. The third script waited for one of the first two to finish, so its write came at
+			// least half a second after the first.
+			const written = await Promise.all(["one", "two", "three"].map(async (name) => (await stat(join(cwd, `${name}.txt`))).mtimeMs));
+			expect(Math.max(...written) - Math.min(...written)).toBeGreaterThanOrEqual(450);
 			expect(session.getLastAssistantText()).toBe("queued scripts done");
 			expect(errors).toEqual([]);
 		} finally {
