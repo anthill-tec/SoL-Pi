@@ -133,12 +133,15 @@ def read_config(path: str | os.PathLike[str]) -> dict:
     return validate_config(_read_json(path), path)
 
 
+def valid_route_part(value) -> bool:
+    """A provider or model name as Pi's default route and `--reducer` accept it: a non-empty
+    string without whitespace, Python's or JavaScript's."""
+    return (isinstance(value, str) and bool(value)
+            and not any(char.isspace() or char in _JS_WHITESPACE for char in value))
+
+
 def _route_part(value) -> str | None:
-    if not isinstance(value, str) or not value:
-        return None
-    if any(char.isspace() or char in _JS_WHITESPACE for char in value):
-        return None
-    return value
+    return value if valid_route_part(value) else None
 
 
 def pi_default_route(agent_directory: str | os.PathLike[str]) -> tuple[str, str] | None:

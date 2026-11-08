@@ -23,6 +23,7 @@ from tests.sol_pi_axi_support import (
     default_reducer_model,
     default_reducer_provider,
     feature_keys,
+    import_sut,
     package_json_version,
     run_cli,
     snapshot,
@@ -438,6 +439,21 @@ class UsageErrorTest(CliTestCase):
             with self.subTest(flag=flag, value=value):
                 self.assert_usage(["setup", self.tree.project, flag, value], flag)
                 self.assertFalse(self.tree.pi_dir.exists())
+
+    def test_reducer_rejects_whitespace_exactly_as_pis_default_route_does(self):
+        # JavaScript's WhiteSpace and LineTerminator code points, and Python-only whitespace.
+        whitespace = ("\t\n\v\f\r \u00a0\u1680\u2000\u2005\u200a\u2028\u2029\u202f\u205f\u3000"
+                      "\ufeff\x1c\x1d\x1e\x1f\x85")
+        config = import_sut("sol_pi_axi.config")
+        self.with_pi_default()
+        for char in whitespace:
+            for provider, model in ((char + "p", "m"), ("p", "m" + char), ("p" + char + "q", "m")):
+                with self.subTest(char=hex(ord(char)), provider=provider, model=model):
+                    self.tree.write_settings({"defaultProvider": provider, "defaultModel": model})
+                    self.assertIsNone(config.pi_default_route(self.tree.agent),
+                                      "the premise: Pi's default route rejects it")
+                    self.assert_usage(["setup", self.tree.project, "--reducer",
+                                       f"{provider}/{model}"], "--reducer")
 
     def test_a_malformed_format_answers_a_usage_error_in_toon(self):
         for args in (["--format", "xml"], ["setup", self.tree.project, "--format", "yaml"],

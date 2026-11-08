@@ -204,9 +204,10 @@ def _parse_features(value: str) -> list[str]:
 
 
 def _parse_reducer(value: str) -> tuple[str, str]:
+    from .config import valid_route_part
+
     provider, slash, model = value.partition("/")
-    if (not slash or not provider or not model
-            or any(char.isspace() for char in provider + model)):
+    if not slash or not valid_route_part(provider) or not valid_route_part(model):
         raise UsageError(f"--reducer must be <provider>/<model>, both non-empty without "
                          f"whitespace, got {value!r}")
     return provider, model
