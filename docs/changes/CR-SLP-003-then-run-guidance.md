@@ -1,6 +1,6 @@
 # CR-SLP-003 — Tell the model when to use `then_run` on `edit` and `write`
 
-**Status:** PENDING · Pre-review: ran — touches another project's surface (Model B relies on SoL-Pi's tool registrations for tool guidance, message #1516 item 6)
+**Status:** COMPLETED · Pre-review: ran — touches another project's surface (Model B relies on SoL-Pi's tool registrations for tool guidance, message #1516 item 6)
 **Type:** feature
 **Priority:** P1 — Model B projects learn `then_run` only from its parameter description
 **Depends on:** CR-SLP-001
