@@ -21,7 +21,8 @@ outside `setup-sol-pi.fish`, which registers a checkout path. `release.yml` publ
 **Surfaces:** `package.json`, `sol_pi_axi/_version.py`, `tests/package.test.ts`.
 
 - `name` `@anthill-tec/sol-pi`; no `private`; `publishConfig` `{"access": "public"}`; `repository`
-  `https://github.com/anthill-tec/SoL-Pi`; `keywords` include `pi-package`.
+  `{"type": "git", "url": "git+https://github.com/anthill-tec/SoL-Pi.git"}` (npm's normalised
+  form); `keywords` include `pi-package`.
 - Two-space indentation.
 - `version` and `__version__` are `0.1.0`.
 - `files`, `pi.extensions`, `peerDependencies` and `dependencies` are unchanged.
