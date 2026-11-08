@@ -143,7 +143,7 @@ class ConfigAndPricing(unittest.TestCase):
         with tempfile.NamedTemporaryFile('w', suffix='.json', delete=False) as f:
             json.dump(cfg, f)
         try:
-            out = subprocess.run(['node', str(checker), '--config', f.name, '--require-all-enabled'],
+            out = subprocess.run(['bun', str(checker), '--config', f.name, '--require-all-enabled'],
                                  capture_output=True, text=True)
         finally:
             os.unlink(f.name)
