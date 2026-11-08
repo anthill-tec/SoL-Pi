@@ -81,6 +81,12 @@ describe("published package", () => {
 		expect(files).not.toContain("AGENTS.md");
 		expect(files).not.toContain("CLAUDE.md");
 	});
+
+	it("ships no Python file and no pyproject.toml: sol-pi-axi is its own PyPI package", () => {
+		expect(files.length).toBeGreaterThan(0);
+		expect(files.filter((file) => file.endsWith(".py"))).toEqual([]);
+		expect(files.filter((file) => file.split("/").pop() === "pyproject.toml")).toEqual([]);
+	});
 });
 
 function runScript(script: string, args: string[]): { status: number | null; output: string } {

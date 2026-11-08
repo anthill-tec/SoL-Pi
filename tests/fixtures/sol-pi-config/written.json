@@ -1,0 +1,93 @@
+{
+	"cases": [
+		{
+			"name": "setup-defaults",
+			"file": "written/setup-defaults.json",
+			"args": [],
+			"piSettings": {
+				"defaultProvider": "anthropic",
+				"defaultModel": "claude-sonnet-4-5"
+			},
+			"note": "no configuration anywhere: all four mechanisms, ratio 12.5, the reducer on Pi's default"
+		},
+		{
+			"name": "features-all",
+			"file": "written/features-all.json",
+			"args": [
+				"--features",
+				"all"
+			],
+			"piSettings": {
+				"defaultProvider": "anthropic",
+				"defaultModel": "claude-sonnet-4-5"
+			},
+			"note": "--features all"
+		},
+		{
+			"name": "features-none",
+			"file": "written/features-none.json",
+			"args": [
+				"--features",
+				"none"
+			],
+			"piSettings": null,
+			"note": "--features none with no Pi default: the reducer is off, so the built-in route is written"
+		},
+		{
+			"name": "features-list",
+			"file": "written/features-list.json",
+			"args": [
+				"--features",
+				"onlineContextCompact,actionFusion"
+			],
+			"piSettings": null,
+			"note": "a comma list in another order than the written keys; the reducer is off, no Pi default"
+		},
+		{
+			"name": "features-list-with-reducer",
+			"file": "written/features-list-with-reducer.json",
+			"args": [
+				"--features",
+				"evidencePreservingReducer,observationPack"
+			],
+			"piSettings": {
+				"defaultProvider": "anthropic",
+				"defaultModel": "claude-sonnet-4-5"
+			},
+			"note": "a comma list naming the reducer: Pi's default route"
+		},
+		{
+			"name": "reducer-off",
+			"file": "written/reducer-off.json",
+			"args": [
+				"--features",
+				"actionFusion,observationPack,onlineContextCompact"
+			],
+			"piSettings": null,
+			"note": "every mechanism but the reducer, no Pi default: the built-in route"
+		},
+		{
+			"name": "reducer-flag",
+			"file": "written/reducer-flag.json",
+			"args": [
+				"--reducer",
+				"openrouter/qwen/qwen3-coder"
+			],
+			"piSettings": null,
+			"note": "--reducer split at the first '/', no Pi default needed"
+		},
+		{
+			"name": "custom-ratio",
+			"file": "written/custom-ratio.json",
+			"args": [
+				"--cache-ratio",
+				"3.25"
+			],
+			"piSettings": {
+				"defaultProvider": "anthropic",
+				"defaultModel": "claude-sonnet-4-5"
+			},
+			"note": "a custom cache write/read ratio"
+		}
+	]
+}
