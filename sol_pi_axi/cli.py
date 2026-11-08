@@ -14,14 +14,18 @@ _HELP_FLAGS = ("-h", "--help")
 _VERSION_FLAGS = ("-v", "-V", "--version")
 _VALUE_FLAGS = ("--features", "--reducer", "--cache-ratio", "--format")
 _SETUP_FLAGS = ("--features", "--reducer", "--cache-ratio", "--non-interactive")
+#: The flags that set configuration values (`setup` and `install`).
+_VALUE_SETTING_FLAGS = ("--features", "--reducer", "--cache-ratio")
+_VERBS = ("setup", "install", "uninstall")
 _FORMATS = ("toon", "json")
 #: The test-only hold between write and rename (see `_hold_hook`).
 _HOLD_ENV = "SOL_PI_AXI_TEST_HOLD"
 _EXIT_FAILED = 1
 _EXIT_USAGE = 2
 
-_DESCRIPTION = ("Agent-facing setup command for the SoL-Pi Pi extensions: writes "
-                "<project>/.pi/sol-pi.json, and nothing else.")
+_DESCRIPTION = ("Agent-facing setup command for the SoL-Pi Pi extensions: registers the "
+                "extension with Pi (install, uninstall) and writes <project>/.pi/sol-pi.json "
+                "(setup).")
 
 _HELP = """\
 sol-pi-axi — agent-facing setup for the SoL-Pi Pi extensions
@@ -33,32 +37,41 @@ Verbs:
   (none)                    the home view: this command and the state of the project's
                             .pi/sol-pi.json and the agent directory's sol-pi.json
   setup <project dir>       write <project dir>/.pi/sol-pi.json, creating .pi/ when missing
+  install                   register npm:@anthill-tec/sol-pi@<this version> with pi install
+                            (user-wide, from home, --no-approve; $PI_BIN, else pi on PATH),
+                            replace earlier SoL-Pi sources, and write the agent directory's
+                            sol-pi.json with the setup defaults when it is absent
+  uninstall                 remove every SoL-Pi source with pi remove; deletes no sol-pi.json
 
 Flags (flags go before or after the argument; --flag value or --flag=value):
-  --features <list>         setup: all, none, or a comma list of actionFusion, observationPack,
-                            evidencePreservingReducer, onlineContextCompact; unlisted ones off
-                            (default: the base values; with none, all four on)
+  --features <list>         setup, install: all, none, or a comma list of actionFusion,
+                            observationPack, evidencePreservingReducer, onlineContextCompact;
+                            unlisted ones off (default: the base values; with none, all four on)
   --reducer <provider>/<model>
-                            setup: the reducer's route, split at the first /
+                            setup, install: the reducer's route, split at the first /
                             (default: the base values; with none, Pi's default provider and model)
-  --cache-ratio <number>    setup: the cache write/read ratio, digits with an optional fraction
-                            (default: the base values; with none, 12.5)
-  --non-interactive         setup: accepted, no effect (sol-pi-axi never prompts)
+  --cache-ratio <number>    setup, install: the cache write/read ratio, digits with an optional
+                            fraction (default: the base values; with none, 12.5)
+  --non-interactive         setup, install, uninstall: accepted, no effect (sol-pi-axi never
+                            prompts)
   --format toon|json        the envelope's encoding (default: toon); json is one line
   -h, --help                print this help and exit 0
   -v, -V, --version         print the version and exit 0
 
-Exit codes: 0 written, unchanged or the home view; 1 failed; 2 usage error;
+Exit codes: 0 written, installed, removed, unchanged or the home view; 1 failed; 2 usage error;
 130, 143, 129 cancelled by SIGINT, SIGTERM, SIGHUP.
 
 Examples:
   sol-pi-axi
+  sol-pi-axi install
+  sol-pi-axi uninstall
   sol-pi-axi setup .
   sol-pi-axi setup ~/work/app --features actionFusion,observationPack --cache-ratio 8
   sol-pi-axi setup ~/work/app --reducer anthropic/claude-sonnet-4-5 --format json
 """
 
-_VALID_INPUT = ("valid verbs: setup <project dir> (no verb: the home view); valid flags: "
+_VALID_INPUT = ("valid verbs: setup <project dir>, install, uninstall (no verb: the home view); "
+                "valid flags: "
                 "--features, --reducer, --cache-ratio, --format, --non-interactive, "
                 "-h/--help, -v/-V/--version")
 
@@ -104,6 +117,10 @@ def _run(args: list[str]) -> int:
         return _emit(_usage_envelope(error), fmt, _EXIT_USAGE)
     if command["verb"] == "setup":
         envelope, code = _setup(command)
+    elif command["verb"] == "install":
+        envelope, code = _install(command)
+    elif command["verb"] == "uninstall":
+        envelope, code = _uninstall()
     else:
         envelope, code = _home()
     return _emit(envelope, fmt, code)
@@ -159,13 +176,21 @@ def _parse(args: list[str]) -> dict:
         verb = "home"
     else:
         verb = positionals[0]
-        if verb != "setup":
+        if verb not in _VERBS:
             raise UsageError(f"unknown verb {verb}")
     if verb == "setup":
         if len(positionals) < 2:
             raise UsageError("setup needs a project directory: sol-pi-axi setup <project dir>")
         if len(positionals) > 2:
             raise UsageError(f"extra argument {positionals[2]} (setup takes one project directory)")
+    elif verb in ("install", "uninstall"):
+        if len(positionals) > 1:
+            raise UsageError(f"extra argument {positionals[1]} ({verb} takes no argument)")
+        if verb == "uninstall":
+            for name in _VALUE_SETTING_FLAGS:
+                if name in flags:
+                    raise UsageError(f"{name} does not apply to uninstall, which writes no "
+                                     "configuration")
     else:
         for name in _SETUP_FLAGS:
             if name in flags:
@@ -273,6 +298,121 @@ def _setup(command: dict) -> tuple[dict, int]:
     return envelope, 0
 
 
+def _install(command: dict) -> tuple[dict, int]:
+    from . import _version, config
+    from .install import InstallReport, run_install
+    from .pi import PiError, recorded_sources
+
+    version = _version.__version__
+    report = InstallReport(agent_dir=config.agent_dir())
+    envelope: dict = {"verb": "install", "ok": False, "version": version, "outcome": "failed",
+                      "context": {"agentDir": str(report.agent_dir)}}
+    error_text = None
+    help_steps: list[str] = []
+    code = _EXIT_FAILED
+    try:
+        try:
+            _arm()
+            run_install(report, version=version, features=command["features"],
+                        reducer=command["reducer"], cache_ratio=command["cache_ratio"],
+                        on_rename=_disarm)
+        finally:
+            _disarm()
+    except Cancelled as cancel:
+        report.outcome = "cancelled"
+        error_text = f"cancelled by {_signal_name(cancel.signum)}"
+        code = 128 + cancel.signum
+    except PiError as error:
+        error_text, help_steps = str(error), error.help
+    except config.ConfigError as error:
+        error_text = str(error)
+        help_steps = (["sol-pi-axi install --reducer <provider>/<model>",
+                       "sol-pi-axi install --features <list without evidencePreservingReducer>"]
+                      if error.flag == "--reducer" else
+                      ["fix the path named in error, then rerun: sol-pi-axi install"])
+    except Exception as error:  # noqa: BLE001 — an unexpected failure is `failed`, named
+        error_text = f"unexpected {type(error).__name__}: {error}"
+    else:
+        code = 0
+
+    if code != 0 and report.source is not None:
+        # Report the registration as the run left it.
+        try:
+            report.registered = report.source in recorded_sources(report.agent_dir)
+        except config.ConfigError:
+            report.registered = False
+    envelope.update(ok=code == 0, outcome=report.outcome)
+    if report.source is not None:
+        envelope["extension"] = {"source": report.source, "registered": report.registered,
+                                 "replaced": list(report.replaced), "pi": report.pi_version}
+    if report.config_path is not None and report.config_state is not None:
+        values = report.config_values
+        summary = _summary(values) if values is not None else {
+            "features": None, "reducer": None, "cacheRatio": None}
+        envelope["config"] = {"path": str(report.config_path), "state": report.config_state,
+                              **summary}
+    if error_text is not None:
+        envelope["error"] = error_text
+    if report.outcome == "installed":
+        help_steps = ["sol-pi-axi setup <project dir>"]
+    envelope.update(warnings=list(report.warnings), help=help_steps)
+    return envelope, code
+
+
+def _uninstall() -> tuple[dict, int]:
+    from . import config
+    from .install import UninstallReport, run_uninstall
+    from .pi import PiError
+
+    report = UninstallReport(agent_dir=config.agent_dir())
+    envelope: dict = {"verb": "uninstall", "ok": False, "version": __version__,
+                      "outcome": "failed", "context": {"agentDir": str(report.agent_dir)}}
+    error_text = None
+    help_steps: list[str] = []
+    code = _EXIT_FAILED
+    try:
+        try:
+            _arm()
+            run_uninstall(report)
+        finally:
+            _disarm()
+    except Cancelled as cancel:
+        report.outcome = "cancelled"
+        error_text = f"cancelled by {_signal_name(cancel.signum)}"
+        code = 128 + cancel.signum
+    except (PiError, config.ConfigError) as error:
+        error_text = str(error)
+        help_steps = list(getattr(error, "help", [])) or ["sol-pi-axi uninstall"]
+    except Exception as error:  # noqa: BLE001 — an unexpected failure is `failed`, named
+        error_text = f"unexpected {type(error).__name__}: {error}"
+    else:
+        code = 0
+    envelope.update(ok=code == 0, outcome=report.outcome, removed=list(report.removed))
+    if error_text is not None:
+        envelope["error"] = error_text
+    envelope.update(warnings=list(report.warnings), help=help_steps)
+    return envelope, code
+
+
+def _extension_state(agent) -> tuple[dict, list[str]]:
+    """The home view's `extension` and its warnings: `absent`, or `registered` with the SoL-Pi
+    source Pi records; a warning when it is not the own release source."""
+    from . import config
+    from .install import registered_source
+
+    try:
+        source = registered_source(agent, __version__)
+    except config.ConfigError as error:
+        return {"state": "absent"}, [f"cannot read Pi's package list: {error}"]
+    if source is None:
+        return {"state": "absent"}, []
+    warnings = []
+    if source != f"npm:@anthill-tec/sol-pi@{__version__}":
+        warnings.append(f"the registered SoL-Pi source {source} is not this version's "
+                        f"npm:@anthill-tec/sol-pi@{__version__}; run sol-pi-axi install")
+    return {"state": "registered", "source": source}, warnings
+
+
 def _home() -> tuple[dict, int]:
     import os
 
@@ -287,6 +427,7 @@ def _home() -> tuple[dict, int]:
             agent_file = config.agent_dir() / "sol-pi.json"
             envelope["project"] = _file_state(project_file)
             envelope["agentConfig"] = _file_state(agent_file)
+            envelope["extension"], extension_warnings = _extension_state(config.agent_dir())
         finally:
             _disarm()
     except Cancelled as cancel:
@@ -297,7 +438,10 @@ def _home() -> tuple[dict, int]:
         envelope.update(ok=False, error=f"unexpected {type(error).__name__}: {error}",
                         warnings=[], help=["sol-pi-axi setup <project dir>"])
         return envelope, _EXIT_FAILED
-    envelope.update(warnings=[], help=["sol-pi-axi setup <project dir>"])
+    help_steps = ["sol-pi-axi setup <project dir>"]
+    if extension_warnings:
+        help_steps.insert(0, "sol-pi-axi install")
+    envelope.update(warnings=extension_warnings, help=help_steps)
     return envelope, 0
 
 
@@ -345,8 +489,9 @@ def _emit(envelope: dict, fmt: str, code: int) -> int:
     return code
 
 
-_KEY_ORDER = ("verb", "ok", "version", "outcome", "path", "config", "context", "bin",
-              "description", "project", "agentConfig", "error", "warnings", "help")
+_KEY_ORDER = ("verb", "ok", "version", "outcome", "path", "extension", "removed", "config",
+              "context", "bin", "description", "project", "agentConfig", "error", "warnings",
+              "help")
 
 
 def _ordered(envelope: dict) -> dict:

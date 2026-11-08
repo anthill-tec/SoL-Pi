@@ -283,12 +283,13 @@ describe("Pi 1.5.0 extension update changelogs", () => {
 		const packageDir = await solPiPackage(root, "0.2.0", RELEASED_CHANGELOG);
 		const { updates, recorded } = await changelogUpdates(packageDir, "0.1.1");
 		expect(updates).toHaveLength(1);
-		expect(updates[0]?.name).toBe("sol-pi");
+		const copied = JSON.parse(await readFile(join(packageDir, "package.json"), "utf8")) as { name: string };
+		expect(updates[0]?.name).toBe(copied.name);
 		expect(updates[0]?.version).toBe("0.2.0");
 		// Pi matches the heading's version and prefixes it with the package name. The update is exactly
 		// the 0.2.0 section: not the [Unreleased] section above it, whose heading carries no version, and
 		// not the 0.1.1 section at the version Pi last saw.
-		expect(updates[0]?.markdown).toBe(RELEASE_0_2_0.replace(/^## /u, "## sol-pi "));
+		expect(updates[0]?.markdown).toBe(RELEASE_0_2_0.replace(/^## /u, `## ${copied.name} `));
 		expect(updates[0]?.markdown).not.toContain("[Unreleased]");
 		expect(updates[0]?.markdown).not.toContain("Pending entry");
 		expect(updates[0]?.markdown).not.toContain("Older entry");
