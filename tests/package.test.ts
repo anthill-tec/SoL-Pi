@@ -4,10 +4,19 @@
  */
 
 import { spawnSync } from "node:child_process";
-import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { copyFileSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, join, sep } from "node:path";
 import { pathToFileURL } from "node:url";
+import {
+	CONFIG_DIR_NAME,
+	createAgentSession,
+	DefaultResourceLoader,
+	SessionManager,
+	SettingsManager,
+	type AgentSession,
+} from "@earendil-works/pi-coding-agent";
+import { fauxProvider } from "@earendil-works/pi-ai/providers/faux";
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 
 interface PackageManifest {
@@ -462,4 +471,196 @@ describe("declared Pi compatibility", () => {
 			expect(compareVersions(declaredFloor(range), incompatible), range).toBeGreaterThan(0);
 		}
 	});
+});
+
+// --- The npm package `@anthill-tec/sol-pi` (CR-SLP-007 §S1) ------------------------------------------
+
+/** The release version both packages carry. */
+const RELEASE_VERSION = "0.1.0";
+
+/** `package.json` values §S1 leaves unchanged, as on the base branch (develop at CR-SLP-004's merge). */
+const BASE_FILES = [
+	"src/sol-pi",
+	"assets",
+	"docs/compatibility.md",
+	"docs/configuration.md",
+	"scripts/check-sol-pi-config.mjs",
+	"agents-install.md",
+	"README.md",
+	"LICENSE",
+	"CONTRIBUTING.md",
+	"SECURITY.md",
+	"THIRD_PARTY_NOTICES.md",
+	"sol-pi.example.json",
+];
+const BASE_PI = { extensions: ["./src/sol-pi/index.ts"] };
+const BASE_PEER_DEPENDENCIES = {
+	"@earendil-works/pi-agent-core": ">=0.84.2",
+	"@earendil-works/pi-ai": ">=0.84.2",
+	"@earendil-works/pi-coding-agent": ">=0.84.2",
+	"@earendil-works/pi-tui": ">=0.84.2",
+	typebox: "*",
+};
+
+/** The files `bun pm pack --dry-run` lists on the base branch, sorted. */
+const BASE_PACKED_FILES = [
+	"CONTRIBUTING.md",
+	"LICENSE",
+	"README.md",
+	"SECURITY.md",
+	"THIRD_PARTY_NOTICES.md",
+	"agents-install.md",
+	"assets/sol-pi-hero.png",
+	"docs/compatibility.md",
+	"docs/configuration.md",
+	"package.json",
+	"scripts/check-sol-pi-config.mjs",
+	"sol-pi.example.json",
+	"src/sol-pi/config.ts",
+	"src/sol-pi/extensions/action-fusion/file-queue.ts",
+	"src/sol-pi/extensions/action-fusion/index.ts",
+	"src/sol-pi/extensions/action-fusion/then-run.ts",
+	"src/sol-pi/extensions/evidence-preserving-reducer/archive.ts",
+	"src/sol-pi/extensions/evidence-preserving-reducer/candidate.ts",
+	"src/sol-pi/extensions/evidence-preserving-reducer/config.ts",
+	"src/sol-pi/extensions/evidence-preserving-reducer/index.ts",
+	"src/sol-pi/extensions/evidence-preserving-reducer/journal.ts",
+	"src/sol-pi/extensions/evidence-preserving-reducer/provider.ts",
+	"src/sol-pi/extensions/evidence-preserving-reducer/receipt.ts",
+	"src/sol-pi/extensions/observation-pack/index.ts",
+	"src/sol-pi/extensions/observation-pack/ledger.ts",
+	"src/sol-pi/extensions/observation-pack/observation.ts",
+	"src/sol-pi/extensions/online-context-compact/economics.ts",
+	"src/sol-pi/extensions/online-context-compact/extension.ts",
+	"src/sol-pi/extensions/online-context-compact/index.ts",
+	"src/sol-pi/extensions/online-context-compact/plan.ts",
+	"src/sol-pi/extensions/online-context-compact/projection.ts",
+	"src/sol-pi/extensions/online-context-compact/state.ts",
+	"src/sol-pi/extensions/online-context-compact/subagents.ts",
+	"src/sol-pi/extensions/online-context-compact/tools.ts",
+	"src/sol-pi/index.ts",
+	"src/sol-pi/runtime-paths.ts",
+	"src/sol-pi/shell-options.ts",
+	"src/sol-pi/tui.ts",
+];
+
+/** The tools SoL-Pi registers with every mechanism enabled. */
+const SOL_PI_TOOLS = ["edit", "obs_recall", "update_plan", "write"];
+
+describe("npm package @anthill-tec/sol-pi", () => {
+	const text = readFileSync("package.json", "utf8");
+	const manifest = JSON.parse(text) as Record<string, unknown>;
+
+	it("is named @anthill-tec/sol-pi, public, with the repository and the pi-package keyword", () => {
+		expect(manifest.name).toBe("@anthill-tec/sol-pi");
+		expect("private" in manifest).toBe(false);
+		expect(manifest.publishConfig).toEqual({ access: "public" });
+		const repository = manifest.repository;
+		if (typeof repository === "string") {
+			expect(repository).toBe("https://github.com/anthill-tec/SoL-Pi");
+		} else {
+			expect(repository).toEqual({ type: "git", url: "https://github.com/anthill-tec/SoL-Pi" });
+		}
+		expect(manifest.keywords).toContain("pi-package");
+	});
+
+	it("is indented with two spaces", () => {
+		expect(text).toBe(`${JSON.stringify(manifest, null, 2)}\n`);
+		expect(text).not.toContain("\t");
+	});
+
+	it(`carries version ${RELEASE_VERSION} in package.json and sol_pi_axi/_version.py`, () => {
+		expect(manifest.version).toBe(RELEASE_VERSION);
+		expect(readFileSync("sol_pi_axi/_version.py", "utf8")).toBe(`__version__ = "${RELEASE_VERSION}"\n`);
+	});
+
+	it("keeps files, pi.extensions, peerDependencies and dependencies unchanged", () => {
+		expect(manifest.files).toEqual(BASE_FILES);
+		expect(manifest.pi).toEqual(BASE_PI);
+		expect(manifest.peerDependencies).toEqual(BASE_PEER_DEPENDENCIES);
+		expect("dependencies" in manifest).toBe(false);
+	});
+
+	it(`passes stamp_version.py check ${RELEASE_VERSION} pypi:. npm:.`, () => {
+		const result = spawnSync("python3", [".github/scripts/stamp_version.py", "check", RELEASE_VERSION, "pypi:.", "npm:."], {
+			cwd: process.cwd(),
+			encoding: "utf8",
+			timeout: 25_000,
+		});
+		expect({ status: result.status, stderr: result.stderr }).toEqual({ status: 0, stderr: "" });
+	}, 30_000);
+
+	it("packs the same files as the base branch", () => {
+		expect([...packedFiles()].sort()).toEqual(BASE_PACKED_FILES);
+	}, 30_000);
+
+	it("packs a tarball that the development dependency's Pi loads with its path as the extension, registering SoL-Pi's tools", async () => {
+		const root = mkdtempSync(join(tmpdir(), "sol-pi-tarball-"));
+		let session: AgentSession | undefined;
+		try {
+			const packed = spawnSync("bun", ["pm", "pack", "--destination", root], {
+				cwd: process.cwd(),
+				encoding: "utf8",
+				timeout: 25_000,
+			});
+			expect(packed.status, packed.stderr).toBe(0);
+			const tarballs = readdirSync(root).filter((name) => name.endsWith(".tgz"));
+			expect(tarballs).toHaveLength(1);
+			const unpacked = join(root, "unpacked");
+			mkdirSync(unpacked);
+			const untar = spawnSync("tar", ["-xzf", join(root, tarballs[0] ?? ""), "-C", unpacked], { encoding: "utf8" });
+			expect(untar.status, untar.stderr).toBe(0);
+			const packageDir = join(unpacked, "package");
+			const packedManifest = JSON.parse(readFileSync(join(packageDir, "package.json"), "utf8")) as Record<string, unknown>;
+			expect({ name: packedManifest.name, version: packedManifest.version })
+				.toEqual({ name: "@anthill-tec/sol-pi", version: RELEASE_VERSION });
+
+			const cwd = join(root, "project");
+			const agentDir = join(root, "agent");
+			mkdirSync(join(cwd, CONFIG_DIR_NAME), { recursive: true });
+			mkdirSync(agentDir);
+			writeFileSync(join(cwd, CONFIG_DIR_NAME, "sol-pi.json"), JSON.stringify({
+				version: 1,
+				actionFusion: true,
+				observationPack: true,
+				evidencePreservingReducer: true,
+				onlineContextCompact: true,
+			}));
+			const settingsManager = SettingsManager.inMemory({ compaction: { enabled: false }, retry: { enabled: false } }, { projectTrusted: true });
+			const resourceLoader = new DefaultResourceLoader({
+				cwd,
+				agentDir,
+				settingsManager,
+				additionalExtensionPaths: [packageDir],
+				noExtensions: true,
+				noSkills: true,
+				noPromptTemplates: true,
+				noThemes: true,
+				noContextFiles: true,
+			});
+			await resourceLoader.reload();
+			const loaded = resourceLoader.getExtensions();
+			expect(loaded.errors).toEqual([]);
+			const faux = fauxProvider({ provider: "sol-pi-tarball-test", api: "sol-pi-tarball-test-api" });
+			({ session } = await createAgentSession({
+				cwd,
+				agentDir,
+				model: faux.getModel(),
+				thinkingLevel: "off",
+				resourceLoader,
+				sessionManager: SessionManager.inMemory(cwd),
+				settingsManager,
+			}));
+			const errors: unknown[] = [];
+			await session.bindExtensions({ onError: (error) => errors.push(error) });
+			expect(errors).toEqual([]);
+			const solPi = loaded.extensions.filter((extension) => extension.resolvedPath.startsWith(`${packageDir}${sep}`));
+			expect(solPi).toHaveLength(1);
+			expect([...(solPi[0]?.tools.keys() ?? [])].sort()).toEqual(SOL_PI_TOOLS);
+			expect(session.getActiveToolNames()).toEqual(expect.arrayContaining(SOL_PI_TOOLS));
+		} finally {
+			session?.dispose();
+			rmSync(root, { recursive: true, force: true });
+		}
+	}, 60_000);
 });
