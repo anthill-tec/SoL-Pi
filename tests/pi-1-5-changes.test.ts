@@ -243,6 +243,10 @@ describe("Pi 1.5.0 extension update changelogs", () => {
 				getExtensionChangelogUpdates(this: unknown): { name: string; version: string; markdown: string }[];
 				readPackageJson: unknown;
 			};
+			// A private step of Pi's InteractiveMode.init, the only public path to it, which needs a TUI.
+			// docs/compatibility.md records the coupling; a Pi that renames or drops it fails here.
+			expect(typeof mode.getExtensionChangelogUpdates, "Pi's InteractiveMode.init step getExtensionChangelogUpdates").toBe("function");
+			expect(typeof mode.readPackageJson, "Pi's InteractiveMode readPackageJson").toBe("function");
 			const updates = mode.getExtensionChangelogUpdates.call({
 				session,
 				settingsManager,
