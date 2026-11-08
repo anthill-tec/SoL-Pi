@@ -153,32 +153,52 @@ describe("Pi 1.5.0 tool argument validation and coercion (pi-schema)", () => {
 });
 
 describe("Pi 1.5.0 extension update changelogs", () => {
-	/**
-	 * A SoL-Pi package at `version` built from this checkout: its manifest, its extension source, and
-	 * its CHANGELOG.md's preamble and `[Unreleased]` section. With `release` (a release's version
-	 * heading), the changelog is cut as a release cuts it: the `[Unreleased]` entries move under that
-	 * heading, and a new `[Unreleased]` section above it holds an entry not yet released. `released` is
-	 * the text of the entries the release moved.
-	 */
-	async function solPiPackage(root: string, version: string, release?: string): Promise<{ dir: string; released: string }> {
+	/** A Keep a Changelog preamble, as CHANGELOG.md has it. */
+	const PREAMBLE = [
+		"# Changelog",
+		"",
+		"All notable changes to this project are documented in this file. The format is based on",
+		"[Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to",
+		"[Semantic Versioning](https://semver.org/spec/v2.0.0.html).",
+		"",
+		"",
+	].join("\n");
+
+	/** An `[Unreleased]` section holding an entry not yet released. */
+	const UNRELEASED = "## [Unreleased]\n\n### Added\n\n- Pending entry.\n\n";
+
+	/** The 0.2.0 release's section, as a release writes it: the entries moved from `[Unreleased]` under its version heading. */
+	const RELEASE_0_2_0 = [
+		"## [0.2.0] - 2026-11-08",
+		"",
+		"### Added",
+		"",
+		"- Pi 1.5.0 support: Pi 1.5.0 joins the tested set as the latest tested release.",
+		"",
+		"### Security",
+		"",
+		"- The development dependencies no longer resolve an affected `undici`.",
+	].join("\n");
+
+	/** An older release, at the version Pi last saw. */
+	const RELEASE_0_1_1 = "## [0.1.1] - 2026-10-01\n\n### Fixed\n\n- Older entry.\n";
+
+	/** CHANGELOG.md before any release: only the `[Unreleased]` section. */
+	const UNRELEASED_CHANGELOG = `${PREAMBLE}${UNRELEASED}`;
+
+	/** CHANGELOG.md after the 0.2.0 release, with a new `[Unreleased]` entry above it and an older release below. */
+	const RELEASED_CHANGELOG = `${PREAMBLE}${UNRELEASED}${RELEASE_0_2_0}\n\n${RELEASE_0_1_1}`;
+
+	/** A SoL-Pi package at `version` built from this checkout's manifest and extension source, with `changelog` as its CHANGELOG.md. */
+	async function solPiPackage(root: string, version: string, changelog: string): Promise<string> {
 		const dir = join(root, "sol-pi");
 		await mkdir(dir);
 		await cp(join(process.cwd(), "src"), join(dir, "src"), { recursive: true });
 		await symlink(join(process.cwd(), "node_modules"), join(dir, "node_modules"));
 		const manifest = JSON.parse(await readFile(join(process.cwd(), "package.json"), "utf8")) as Record<string, unknown>;
 		await writeFile(join(dir, "package.json"), JSON.stringify({ ...manifest, version }));
-		const changelog = await readFile(join(process.cwd(), "CHANGELOG.md"), "utf8");
-		const section = /^## \[Unreleased\]\n([\s\S]*?)(?=^## |(?![\s\S]))/mu.exec(changelog);
-		if (!section) throw new Error("CHANGELOG.md has no [Unreleased] section");
-		const preamble = changelog.slice(0, section.index);
-		const unreleased = section[1] ?? "";
-		await writeFile(
-			join(dir, "CHANGELOG.md"),
-			release
-				? `${preamble}## [Unreleased]\n\n### Added\n\n- Pending entry.\n\n${release}\n${unreleased}`
-				: `${preamble}## [Unreleased]\n${unreleased}`,
-		);
-		return { dir, released: unreleased.trim() };
+		await writeFile(join(dir, "CHANGELOG.md"), changelog);
+		return dir;
 	}
 
 	/** The extension changelog updates Pi's interactive mode shows on a fresh launch of a session with SoL-Pi installed. */
@@ -236,25 +256,24 @@ describe("Pi 1.5.0 extension update changelogs", () => {
 
 	it("shows a release's Keep a Changelog section after an update and never the [Unreleased] section", async () => {
 		const root = await tempDir("sol-pi-changelog-");
-		const { dir: packageDir, released } = await solPiPackage(root, "0.2.0", "## [0.2.0] - 2026-11-08");
+		const packageDir = await solPiPackage(root, "0.2.0", RELEASED_CHANGELOG);
 		const { updates, recorded } = await changelogUpdates(packageDir, "0.1.1");
 		expect(updates).toHaveLength(1);
 		expect(updates[0]?.name).toBe("sol-pi");
 		expect(updates[0]?.version).toBe("0.2.0");
-		// Pi matches the heading's version and prefixes it with the package name.
-		expect(updates[0]?.markdown.startsWith("## sol-pi [0.2.0] - 2026-11-08\n")).toBe(true);
-		// The released entries, which sat under [Unreleased] before the release.
-		expect(released).not.toBe("");
-		expect(updates[0]?.markdown).toBe(`## sol-pi [0.2.0] - 2026-11-08\n${released ? `\n${released}` : ""}`);
-		// The [Unreleased] heading carries no version, so its entries are never shown.
+		// Pi matches the heading's version and prefixes it with the package name. The update is exactly
+		// the 0.2.0 section: not the [Unreleased] section above it, whose heading carries no version, and
+		// not the 0.1.1 section at the version Pi last saw.
+		expect(updates[0]?.markdown).toBe(RELEASE_0_2_0.replace(/^## /u, "## sol-pi "));
 		expect(updates[0]?.markdown).not.toContain("[Unreleased]");
 		expect(updates[0]?.markdown).not.toContain("Pending entry");
+		expect(updates[0]?.markdown).not.toContain("Older entry");
 		expect(recorded).toBe("0.2.0");
 	}, 30_000);
 
 	it("shows nothing for SoL-Pi's changelog until a release adds a version heading", async () => {
 		const root = await tempDir("sol-pi-changelog-");
-		const { dir: packageDir } = await solPiPackage(root, "0.2.0");
+		const packageDir = await solPiPackage(root, "0.2.0", UNRELEASED_CHANGELOG);
 		const { updates, recorded } = await changelogUpdates(packageDir, "0.1.1");
 		expect(updates).toEqual([]);
 		expect(recorded).toBe("0.1.1");
@@ -262,11 +281,21 @@ describe("Pi 1.5.0 extension update changelogs", () => {
 
 	it("records the installed version without showing a changelog the first time Pi sees SoL-Pi", async () => {
 		const root = await tempDir("sol-pi-changelog-");
-		const { dir: packageDir } = await solPiPackage(root, "0.2.0", "## [0.2.0] - 2026-11-08");
+		const packageDir = await solPiPackage(root, "0.2.0", RELEASED_CHANGELOG);
 		const { updates, recorded } = await changelogUpdates(packageDir, undefined);
 		expect(updates).toEqual([]);
 		expect(recorded).toBe("0.2.0");
 	}, 30_000);
+
+	it("keeps CHANGELOG.md's sections under the Keep a Changelog headings the tests above give Pi", async () => {
+		// Holds before and after a release: a release moves the [Unreleased] entries under a
+		// "## [x.y.z] - YYYY-MM-DD" heading and leaves "## [Unreleased]" above it.
+		const changelog = await readFile(join(process.cwd(), "CHANGELOG.md"), "utf8");
+		expect(changelog.startsWith(PREAMBLE)).toBe(true);
+		const headings = changelog.split("\n").filter((line) => line.startsWith("## "));
+		expect(headings[0]).toBe("## [Unreleased]");
+		for (const heading of headings.slice(1)) expect(heading).toMatch(/^## \[\d+\.\d+\.\d+\] - \d{4}-\d{2}-\d{2}$/u);
+	});
 });
 
 describe("Pi 1.5.0 codemode worker queue", () => {
