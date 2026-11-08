@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: MIT
  */
 
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "bun:test";
 
@@ -38,7 +38,10 @@ describe("agent installation instructions", () => {
 
 	it("keeps the README pointed at the managed installation and configuration profile", () => {
 		const readme = rootFile("README.md");
-		expect(readme).toContain("[agent installation and configuration protocol](agents-install.md)");
+		// CR-SLP-007 §S6: README's repository links are absolute, so they resolve on PyPI and npm.
+		expect(readme).toContain(
+			"[agent installation and configuration protocol](https://github.com/anthill-tec/SoL-Pi/blob/main/agents-install.md)",
+		);
 		expect(readme).toContain("check-sol-pi-config.mjs --require-all-enabled");
 	});
 
@@ -142,7 +145,8 @@ describe("agent installation instructions", () => {
 		]) {
 			expect(compatibility).toMatch(new RegExp(`^\\| ${mechanism} \\|`, "mu"));
 		}
-		expect(rootFile("README.md")).toContain("(docs/compatibility.md#codemode)");
+		// CR-SLP-007 §S6: the absolute blob/main form of the former relative link.
+		expect(rootFile("README.md")).toContain("(https://github.com/anthill-tec/SoL-Pi/blob/main/docs/compatibility.md#codemode)");
 	});
 
 	it("documents one configured ratio and no active-model cost inference", () => {
@@ -198,13 +202,11 @@ describe("sol-pi-axi documentation", () => {
 			expect(text).toMatch(/exit (code|status)/iu);
 		});
 
-		it(`${name} installs sol-pi-axi with uv tool install from anthill-tec/SoL-Pi`, () => {
+		// CR-SLP-007 §S6 migrates this from the git+https install to the PyPI one.
+		it(`${name} installs sol-pi-axi with uv tool install sol-pi-axi==<version>`, () => {
 			const text = rootFile(name);
-			const version = JSON.parse(rootFile("package.json")).version as string;
-			const escaped = version.replaceAll(".", "\\.");
-			expect(text).toMatch(
-				new RegExp(`uv tool install git\\+https://github\\.com/anthill-tec/SoL-Pi@(<version>|v?${escaped})`, "u"),
-			);
+			expect(text).toMatch(new RegExp(`uv tool install sol-pi-axi==${versionPattern()}`, "u"));
+			expect(text).not.toContain("uv tool install git+");
 			for (const line of installLines(text)) {
 				expect(line).not.toContain("NVlabs/SoL-Pi");
 				if (/github\.com/u.test(line)) expect(line).toContain("anthill-tec/SoL-Pi");
@@ -212,11 +214,13 @@ describe("sol-pi-axi documentation", () => {
 		});
 	}
 
-	it("README's install lines name anthill-tec/SoL-Pi", () => {
-		const lines = installLines(rootFile("README.md")).filter((line) => /github\.com/u.test(line));
-		expect(lines.length).toBeGreaterThanOrEqual(2);
+	// CR-SLP-007 §S6 migrates this: the extension installs from npm, no longer from a git source, so
+	// README need not hold any github.com install line; any it holds still names anthill-tec/SoL-Pi.
+	it("README's install lines name anthill-tec/SoL-Pi and install the extension from npm", () => {
+		const readme = rootFile("README.md");
+		const lines = installLines(readme).filter((line) => /github\.com/u.test(line));
 		for (const line of lines) expect(line).toContain("anthill-tec/SoL-Pi");
-		expect(rootFile("README.md")).toContain("pi install git:github.com/anthill-tec/SoL-Pi");
+		expect(readme).toMatch(new RegExp(`pi install npm:@anthill-tec/sol-pi@${versionPattern()}`, "u"));
 	});
 
 	it("states that the extension reads no environment variables and sol-pi-axi reads PI_CODING_AGENT_DIR", () => {
@@ -266,5 +270,174 @@ describe("sol-pi-axi documentation", () => {
 		const section = unreleasedSection(rootFile("CHANGELOG.md"));
 		expect(section).toContain("sol-pi-axi");
 		expect(section).toContain("setup");
+	});
+});
+
+/** `<version>`, or the shared version itself (package.json's). */
+function versionPattern(): string {
+	const version = JSON.parse(rootFile("package.json")).version as string;
+	return `(<version>|${version.replaceAll(".", "\\.")})`;
+}
+
+/** Each `##`/`###` section of a Markdown document (heading line included). */
+function sections(text: string): string[] {
+	return text.split(/\n(?=#{2,3} )/u);
+}
+
+/** Every link and image target of a Markdown/HTML document, with its kind. */
+function targets(text: string): { kind: "image" | "link"; target: string }[] {
+	const found: { kind: "image" | "link"; target: string }[] = [];
+	for (const match of text.matchAll(/(!?)\[[^\]]*\]\(\s*<?([^)\s>]+)>?(?:\s+"[^"]*")?\s*\)/gu)) {
+		found.push({ kind: match[1] ? "image" : "link", target: match[2]! });
+	}
+	for (const match of text.matchAll(/\b(href|src)\s*=\s*(["'])([^"']*)\2/gu)) {
+		found.push({ kind: match[1] === "src" ? "image" : "link", target: match[3]! });
+	}
+	for (const match of text.matchAll(/\bsrcset\s*=\s*(["'])([^"']*)\1/gu)) {
+		for (const candidate of match[2]!.split(",")) {
+			const target = candidate.trim().split(/\s+/u)[0];
+			if (target) found.push({ kind: "image", target });
+		}
+	}
+	return found;
+}
+
+const RAW_PREFIX = "https://raw.githubusercontent.com/anthill-tec/SoL-Pi/main/";
+const BLOB_PREFIX = "https://github.com/anthill-tec/SoL-Pi/blob/main/";
+
+/** The repository path a raw/blob URL names, without its query or anchor. */
+function repositoryPath(url: string, prefix: string): string {
+	return decodeURIComponent(url.slice(prefix.length).split(/[?#]/u)[0]!);
+}
+
+function isRepositoryFile(path: string): boolean {
+	const full = join(process.cwd(), path);
+	return path.length > 0 && !path.split("/").includes("..") && existsSync(full) && statSync(full).isFile();
+}
+
+// CR-SLP-007 §S6: the registry install, its commands and envelopes, and README for PyPI and npm.
+describe("registry install documentation", () => {
+	const INSTALL_OUTCOMES = ["installed", "unchanged", "failed", "cancelled"];
+	const INSTALL_KEYS = ["extension", "source", "registered", "replaced", "agentDir"];
+
+	for (const name of ["README.md", "agents-install.md"]) {
+		it(`${name} installs sol-pi-axi from PyPI, then runs sol-pi-axi install, then setup per project`, () => {
+			const text = rootFile(name);
+			const uv = text.search(new RegExp(`uv tool install sol-pi-axi==${versionPattern()}`, "u"));
+			expect(uv, "uv tool install sol-pi-axi==<version>").toBeGreaterThanOrEqual(0);
+			const install = text.indexOf("sol-pi-axi install", uv);
+			expect(install, "sol-pi-axi install after the uv install").toBeGreaterThan(uv);
+			expect(text).toMatch(/sol-pi-axi setup <[^>\n]+>/u);
+		});
+
+		it(`${name} names the npm alternative and the version the two packages share`, () => {
+			const text = rootFile(name);
+			expect(text).toMatch(new RegExp(`pi install npm:@anthill-tec/sol-pi@${versionPattern()}`, "u"));
+			expect(text).toMatch(/\b(the same|shares?|shared)\b[^.\n]{0,80}\bversion\b/iu);
+		});
+
+		it(`${name} documents install, uninstall, $PI_BIN, their envelopes and the home view's extension`, () => {
+			const text = rootFile(name);
+			expect(text).toContain("sol-pi-axi install");
+			expect(text).toContain("sol-pi-axi uninstall");
+			expect(text).toContain("$PI_BIN");
+			for (const outcome of INSTALL_OUTCOMES) expect(text, outcome).toContain(outcome);
+			expect(text, "uninstall outcome removed").toContain("removed");
+			for (const key of INSTALL_KEYS) expect(documentsKey(text, key), `envelope key ${key}`).toBe(true);
+			expect(documentsKey(text, "removed"), "uninstall's removed list").toBe(true);
+			expect(
+				sections(text).some((section) => /home view/iu.test(section) && documentsKey(section, "extension")),
+				"a section documenting the home view's extension",
+			).toBe(true);
+		});
+
+		it(`${name} installs nothing from a checkout path`, () => {
+			const lines = installLines(rootFile(name));
+			expect(lines.length, "install lines").toBeGreaterThanOrEqual(2);
+			for (const line of lines) {
+				expect(line).not.toMatch(/\bpi install\s+["']?(\/|\.{1,2}\/|~|\$|[A-Za-z]:\\)/u);
+				expect(line).not.toMatch(/\buv tool install\s+(-e\b|--editable\b|["']?(\.|\/|~|\$|git\+))/u);
+			}
+		});
+
+		it(`${name} states that pi install npm: runs npm or the npmCommand setting, on PATH`, () => {
+			const statements = rootFile(name)
+				.split(/\n\s*\n/u)
+				.filter((paragraph) => paragraph.includes("npmCommand"));
+			expect(statements.length, "a statement naming npmCommand").toBeGreaterThanOrEqual(1);
+			expect(
+				statements.some(
+					(paragraph) =>
+						/\bnpm\b(?![:/@-])/u.test(paragraph.replaceAll("npmCommand", "")) &&
+						paragraph.includes("npm:") &&
+						paragraph.includes("PATH"),
+				),
+				"the statement names npm, npm: sources, npmCommand and PATH",
+			).toBe(true);
+		});
+	}
+
+	it("README has no relative Markdown or HTML target except in-page anchors", () => {
+		const readme = rootFile("README.md");
+		const relative = targets(readme)
+			.map(({ target }) => target)
+			.filter((target) => !target.startsWith("#") && !/^[A-Za-z][A-Za-z0-9+.-]*:/u.test(target));
+		expect(relative).toEqual([]);
+		// In-page anchors are unchanged.
+		expect(readme).toContain('href="#getting-started"');
+	});
+
+	it("README's repository images are raw main URLs and its repository links blob main URLs, to existing files", () => {
+		const readme = rootFile("README.md");
+		const found = targets(readme);
+		// Each former repository-relative target, in its absolute form.
+		expect(found).toContainEqual({ kind: "image", target: `${RAW_PREFIX}assets/sol-pi-hero.png` });
+		for (const path of [
+			"docs/configuration.md",
+			"LICENSE",
+			"examples/sol-pi-skill/README.md",
+			"examples/solpi-visual/README.md",
+			"sol-pi.example.json",
+			"agents-install.md",
+			"docs/compatibility.md#codemode",
+			"docs/compatibility.md",
+			"SECURITY.md",
+			"CONTRIBUTING.md",
+		]) {
+			expect(found, path).toContainEqual({ kind: "link", target: `${BLOB_PREFIX}${path}` });
+		}
+		const repository = /^https:\/\/(raw\.githubusercontent\.com|github\.com)\/anthill-tec\/SoL-Pi\/(main|blob|raw|tree)\//iu;
+		for (const { kind, target } of found.filter(({ target }) => repository.test(target))) {
+			const prefix = kind === "image" ? RAW_PREFIX : BLOB_PREFIX;
+			expect(target.startsWith(prefix), `${kind} ${target} uses ${prefix}`).toBe(true);
+			expect(isRepositoryFile(repositoryPath(target, prefix)), `${target} names a repository file`).toBe(true);
+		}
+	});
+
+	it("CONTRIBUTING.md covers checkout development, publishing with its one-time setup, and re-rendering", () => {
+		const text = rootFile("CONTRIBUTING.md");
+		// Installing from a checkout for development.
+		expect(text).toMatch(/checkout/iu);
+		expect(text).toMatch(/\bpi install\s+["']?(\/|\.{1,2}\/?|~|\$|<)/u);
+		// The release's publishing.
+		for (const word of ["release.yml", "sol-pi-axi", "@anthill-tec/sol-pi"]) expect(text, word).toContain(word);
+		for (const word of [/\bPyPI\b/iu, /\bnpm\b/u]) expect(text).toMatch(word);
+		// Its one-time setup (the workflow header's list).
+		expect(text).toMatch(/one-time setup/iu);
+		for (const word of ["RELEASE_PAT", "testpypi", "pypi.org", "test.pypi.org", "NPM_TOKEN"]) {
+			expect(text, word).toContain(word);
+		}
+		expect(text).toMatch(/trusted publisher/iu);
+		// Re-rendering the committed rendering.
+		expect(text).toContain("modelb-axi release-workflow");
+		expect(text).toContain("tests/fixtures/release-workflow/rendered.yml");
+	});
+
+	it("CHANGELOG.md [Unreleased] names the two packages, install and uninstall", () => {
+		const section = unreleasedSection(rootFile("CHANGELOG.md"));
+		expect(section).toContain("@anthill-tec/sol-pi");
+		expect(section).toMatch(/`sol-pi-axi`|\bsol-pi-axi\b(?!-)/u);
+		expect(section).toMatch(/sol-pi-axi install\b|`install`/u);
+		expect(section).toMatch(/sol-pi-axi uninstall\b|`uninstall`/u);
 	});
 });

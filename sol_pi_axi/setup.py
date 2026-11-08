@@ -82,6 +82,21 @@ def _setup_defaults(enabled: set[str], reducer: tuple[str, str] | None,
     return {key: values[key] for key in KEY_ORDER}
 
 
+def default_values(agent_dir: str | os.PathLike[str], *, features: Iterable[str] | None = None,
+                   reducer: tuple[str, str] | None = None,
+                   cache_ratio: float | None = None) -> dict:
+    """The setup defaults after the given values, as `run_setup` writes them when no
+    configuration exists: `features` the enabled mechanisms (`None`: all four), `reducer`
+    `(provider, model)` (`None`: Pi's default route when the reducer is enabled), `cache_ratio`
+    the cache write/read ratio. Raises `ConfigError` naming `--reducer` when the reducer is
+    enabled with no route."""
+    enabled: set[str] = set(FEATURE_KEYS if features is None else features)
+    values = _setup_defaults(enabled, reducer, Path(agent_dir))
+    if cache_ratio is not None:
+        values[_RATIO] = float(cache_ratio)
+    return values
+
+
 def run_setup(project_dir: str | os.PathLike[str], *, agent_dir: str | os.PathLike[str] | None = None,
               features: Iterable[str] | None = None, reducer: tuple[str, str] | None = None,
               cache_ratio: float | None = None, hook: WriteHook | None = None,

@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/sol-pi-hero.png" width="100%" alt="SoL-Pi: Scaling Auto-Research Loops for Efficient Agent Harnesses" />
+  <img src="https://raw.githubusercontent.com/anthill-tec/SoL-Pi/main/assets/sol-pi-hero.png" width="100%" alt="SoL-Pi: Scaling Auto-Research Loops for Efficient Agent Harnesses" />
 </p>
 
 # ⚡ SoL-Pi: Scaling Auto-Research Loops for Efficient Agent Harnesses
@@ -7,9 +7,9 @@
 <p align="center">
   <a href="https://arxiv.org/abs/2609.20519"><img src="https://img.shields.io/badge/arXiv-2609.20519-B31B1B?logo=arxiv&amp;logoColor=white" alt="arXiv: 2609.20519" /></a>
   <a href="#getting-started"><img src="https://img.shields.io/badge/Getting%20Started-Install-76B900" alt="Getting Started" /></a>
-  <a href="docs/configuration.md"><img src="https://img.shields.io/badge/Docs-Configuration-555555" alt="Configuration" /></a>
+  <a href="https://github.com/anthill-tec/SoL-Pi/blob/main/docs/configuration.md"><img src="https://img.shields.io/badge/Docs-Configuration-555555" alt="Configuration" /></a>
   <a href="https://nvlabs.github.io/SoL-Pi/"><img src="https://img.shields.io/badge/Blog-SoL--Pi-76B900" alt="SoL-Pi Blog" /></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="MIT License" /></a>
+  <a href="https://github.com/anthill-tec/SoL-Pi/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="MIT License" /></a>
 </p>
 
 > [!NOTE]
@@ -19,8 +19,8 @@
 
 ## 📰 News
 
-- **2026-10-14** — Released the [SoL-Pi Skill](examples/sol-pi-skill/README.md) example: use SoL-Pi as a skill from Claude Code (`/sol-pi`) or Codex (`$sol-pi`). The current task is handed to SoL-Pi with the host conversation as context, runs in the background, and its result is reported back to the session.
-- **2026-10-13** — Released the [SoL-Pi Visual](examples/solpi-visual/README.md) example for 3D scene reconstruction in Blender. On this task, it lowers the cost per scene by **37%** compared with Codex, with 13% fewer model calls. See the example for visual scores and scene comparisons.
+- **2026-10-14** — Released the [SoL-Pi Skill](https://github.com/anthill-tec/SoL-Pi/blob/main/examples/sol-pi-skill/README.md) example: use SoL-Pi as a skill from Claude Code (`/sol-pi`) or Codex (`$sol-pi`). The current task is handed to SoL-Pi with the host conversation as context, runs in the background, and its result is reported back to the session.
+- **2026-10-13** — Released the [SoL-Pi Visual](https://github.com/anthill-tec/SoL-Pi/blob/main/examples/solpi-visual/README.md) example for 3D scene reconstruction in Blender. On this task, it lowers the cost per scene by **37%** compared with Codex, with 13% fewer model calls. See the example for visual scores and scene comparisons.
 
 ## 💡 TL;DR
 
@@ -86,23 +86,28 @@ npm install --global @earendil-works/pi-coding-agent@1.5.0
 
 Pi 1.3.0 and 0.84.2 remain supported and tested; install `@earendil-works/pi-coding-agent@1.3.0` or `@earendil-works/pi-coding-agent@0.84.2` instead to stay on one of them.
 
-Then install SoL-Pi directly from [anthill-tec/SoL-Pi](https://github.com/anthill-tec/SoL-Pi):
+Then install the `sol-pi-axi` command from PyPI and let it register the extension with Pi. It needs Python 3.14 or newer and [uv](https://docs.astral.sh/uv/); `<version>` is a SoL-Pi release:
 
 ```bash
-pi install git:github.com/anthill-tec/SoL-Pi
+uv tool install sol-pi-axi==<version>
+sol-pi-axi install
 ```
 
-To install it only for the current project, use the project-local scope:
+`sol-pi-axi install` registers the extension `npm:@anthill-tec/sol-pi@<version>` with Pi (`pi install`, run from your home directory) and writes the agent directory's `sol-pi.json` with the setup defaults when it has none. Then configure each project:
 
 ```bash
-pi install git:github.com/anthill-tec/SoL-Pi --local --approve
+sol-pi-axi setup <project dir>
 ```
 
-To write a project's configuration from the command line (or from a coding agent), install the `sol-pi-axi` command as well. It needs Python 3.14 or newer and [uv](https://docs.astral.sh/uv/); `<version>` is a SoL-Pi release tag:
+Alternatively, register the extension with Pi yourself, from npm:
 
 ```bash
-uv tool install git+https://github.com/anthill-tec/SoL-Pi@<version>
+pi install npm:@anthill-tec/sol-pi@<version>
 ```
+
+The PyPI package `sol-pi-axi` and the npm package `@anthill-tec/sol-pi` share the same release version; `sol-pi-axi install` registers the extension at its own version.
+
+Pi installs an `npm:` source by running `npm`, or the command array in its `npmCommand` setting (for example `["pnpm"]` or `["bun"]`); that command must be on `PATH`.
 
 ### Configure
 
@@ -126,7 +131,7 @@ The following conservative configuration enables only the two local mechanisms t
 }
 ```
 
-Enable additional mechanisms only after reviewing their configuration and security implications. The extension reads no dedicated environment variables; feature flags, the reducer provider/model route, and the compaction ratio are configured in `sol-pi.json`. The `sol-pi-axi` command reads `PI_CODING_AGENT_DIR` to find the agent directory (default `~/.pi/agent`). See [sol-pi.example.json](sol-pi.example.json) for a template listing every key.
+Enable additional mechanisms only after reviewing their configuration and security implications. The extension reads no dedicated environment variables; feature flags, the reducer provider/model route, and the compaction ratio are configured in `sol-pi.json`. The `sol-pi-axi` command reads `PI_CODING_AGENT_DIR` to find the agent directory (default `~/.pi/agent`). See [sol-pi.example.json](https://github.com/anthill-tec/SoL-Pi/blob/main/sol-pi.example.json) for a template listing every key.
 
 ### `sol-pi-axi setup`
 
@@ -153,11 +158,19 @@ With no verb, `sol-pi-axi` prints the home view: `bin`, `description`, and the s
 
 Exit codes: exit code 0 for `written`, `unchanged` and the home view; 1 for `failed`; 2 for a usage error; 130, 143 and 129 for a run `cancelled` by `SIGINT`, `SIGTERM` or `SIGHUP` (nothing is written). After `written`, start `pi` in the project and trust it, so the extension reads the project file.
 
-For the complete schema, see [Configuration](docs/configuration.md). Coding agents and automated environments should follow the canonical [agent installation and configuration protocol](agents-install.md), which describes an all-enabled configuration checked with `scripts/check-sol-pi-config.mjs --require-all-enabled`.
+### `sol-pi-axi install` and `sol-pi-axi uninstall`
+
+`sol-pi-axi install` runs Pi as `$PI_BIN` when it is set, else `pi` on `PATH`; with neither it fails, naming both. Every `pi` command runs from your home directory with `--no-approve`. It registers `npm:@anthill-tec/sol-pi@<version>` unless Pi's `settings.json` already holds exactly that source; an `npm:@anthill-tec/sol-pi` entry at another version is replaced in place by Pi, and other SoL-Pi sources (`npm:sol-pi`, a git or URL source, a local checkout path) are removed with `pi remove` only after `pi install` succeeds. An existing `sol-pi.json` in the agent directory is kept untouched; `--features`, `--reducer` and `--cache-ratio` apply only when the file is written. Its envelope adds `outcome` (`installed`, `unchanged`, `failed` or `cancelled`), `extension` (`source`, `registered`, `replaced`, `pi`), `config` (`path`, `state` `written` or `kept`, and the values) and `context` (`agentDir`); `unchanged` means nothing was registered and nothing written.
+
+`sol-pi-axi uninstall` removes every SoL-Pi source Pi has registered with `pi remove`, and deletes no configuration file (`warnings` names the agent directory's `sol-pi.json` when it exists). Its envelope adds `outcome` (`removed`, `unchanged`, `failed` or `cancelled`), `removed` (the sources removed) and `context` (`agentDir`).
+
+The home view also shows the extension: `extension` has `state` (`absent` or `registered`) and the registered `source`. When the registered source is not `npm:@anthill-tec/sol-pi` at `sol-pi-axi`'s own version, the home view warns and adds `sol-pi-axi install` to `help`.
+
+For the complete schema, see [Configuration](https://github.com/anthill-tec/SoL-Pi/blob/main/docs/configuration.md). Coding agents and automated environments should follow the canonical [agent installation and configuration protocol](https://github.com/anthill-tec/SoL-Pi/blob/main/agents-install.md), which describes an all-enabled configuration checked with `scripts/check-sol-pi-config.mjs --require-all-enabled`.
 
 ### Pi 1.x and codemode
 
-SoL-Pi is tested with Pi 0.84.2, 1.0.4, 1.3.0, and 1.5.0. All four mechanisms work with Pi codemode in both `codemode.mode: "on"` and `"only"`. In `"only"` mode, the model reaches bash, edit, and write through codemode scripts, and Evidence-Preserving Reducer skips script calls, so it has no effect there. See [Codemode](docs/compatibility.md#codemode) for per-mechanism behavior.
+SoL-Pi is tested with Pi 0.84.2, 1.0.4, 1.3.0, and 1.5.0. All four mechanisms work with Pi codemode in both `codemode.mode: "on"` and `"only"`. In `"only"` mode, the model reaches bash, edit, and write through codemode scripts, and Evidence-Preserving Reducer skips script calls, so it has no effect there. See [Codemode](https://github.com/anthill-tec/SoL-Pi/blob/main/docs/compatibility.md#codemode) for per-mechanism behavior.
 
 To check the Pi that will load SoL-Pi, install the checkout's dependencies, then run the check from the checkout; `--strict` also fails on an untested Pi version. Without `bun install`, the check cannot load TypeScript, prints a warning, and fails under `--strict` even on a tested Pi. For a Pi installed with Bun:
 
@@ -188,20 +201,20 @@ With `pi --no-session` or `SessionManager.inMemory()`, Pi provides no session di
 
 Online Context Compact stores its state in Pi's session log. After a successful compaction, it starts a new turn and automatically continues the active task; after a failed compaction, it continues the task without compacting and reports the error. Cancelling the compaction or exiting Pi does not trigger automatic continuation.
 
-Evidence-Preserving Reducer may send eligible diagnostic-log content to its configured reducer model using Pi-managed authentication. Review [SECURITY.md](SECURITY.md) before enabling it. Do not enable remote reduction for logs that must remain local.
+Evidence-Preserving Reducer may send eligible diagnostic-log content to its configured reducer model using Pi-managed authentication. Review [SECURITY.md](https://github.com/anthill-tec/SoL-Pi/blob/main/SECURITY.md) before enabling it. Do not enable remote reduction for logs that must remain local.
 
 ## Documentation
 
 | Document | Purpose |
 |---|---|
-| [Configuration](docs/configuration.md) | Config search order, schema, defaults, and trust behavior |
-| [Compatibility](docs/compatibility.md) | Supported Pi APIs and standalone integration details |
-| [Security](SECURITY.md) | Local storage, remote reduction, and sensitive behavior |
-| [Agent installation](agents-install.md) | Reproducible installation and all-enabled validation procedure |
+| [Configuration](https://github.com/anthill-tec/SoL-Pi/blob/main/docs/configuration.md) | Config search order, schema, defaults, and trust behavior |
+| [Compatibility](https://github.com/anthill-tec/SoL-Pi/blob/main/docs/compatibility.md) | Supported Pi APIs and standalone integration details |
+| [Security](https://github.com/anthill-tec/SoL-Pi/blob/main/SECURITY.md) | Local storage, remote reduction, and sensitive behavior |
+| [Agent installation](https://github.com/anthill-tec/SoL-Pi/blob/main/agents-install.md) | Reproducible installation and all-enabled validation procedure |
 
 ## Development
 
-Install from the lockfile and run the complete source checks:
+To install SoL-Pi from a checkout while developing it, see [CONTRIBUTING.md](https://github.com/anthill-tec/SoL-Pi/blob/main/CONTRIBUTING.md). Install from the lockfile and run the complete source checks:
 
 ```bash
 bun install --frozen-lockfile --ignore-scripts
@@ -216,7 +229,7 @@ bun run check:pi
 
 SoL-Pi is developed and maintained by NVIDIA as a standalone extension for Pi.
 
-We welcome tested, Pi-compatible extension PRs that improve token efficiency and reduce token cost. Our team will help benchmark contributions, publish results on a regular reporting cycle, and credit authors of accepted PRs as Contributors. See [CONTRIBUTING.md](CONTRIBUTING.md) for details.
+We welcome tested, Pi-compatible extension PRs that improve token efficiency and reduce token cost. Our team will help benchmark contributions, publish results on a regular reporting cycle, and credit authors of accepted PRs as Contributors. See [CONTRIBUTING.md](https://github.com/anthill-tec/SoL-Pi/blob/main/CONTRIBUTING.md) for details.
 
 ## Acknowledgements
 
@@ -224,7 +237,7 @@ SoL-Pi builds on the public extension interfaces provided by [Pi](https://github
 
 ## License
 
-SoL-Pi is released under the [MIT License](LICENSE).
+SoL-Pi is released under the [MIT License](https://github.com/anthill-tec/SoL-Pi/blob/main/LICENSE).
 
 ## Star History
 

@@ -1,6 +1,6 @@
 # SoL-Pi Agent Installation and Configuration Protocol
 
-This is the canonical procedure for Codex, Claude Code, and other coding agents that install, configure, or validate SoL-Pi from a full source checkout. Follow the phases in order. Explicit user instructions take precedence. An extracted npm package is not a substitute for the checkout because it does not contain the test suite.
+This is the canonical procedure for Codex, Claude Code, and other coding agents that install, configure, or validate SoL-Pi. SoL-Pi installs from the registries (PyPI and npm); its validation runs from a full source checkout. Follow the phases in order. Explicit user instructions take precedence. An extracted npm package is not a substitute for the checkout because it does not contain the test suite.
 
 Installation and configuration are complete only when Pi remains unmodified, the repository checks pass, Pi lists the package, all four mechanisms are enabled in one effective `sol-pi.json`, and Pi starts without an extension error.
 
@@ -20,10 +20,10 @@ Resolve these values before making changes:
 
 - `sol_pi_root`: absolute path to the intended SoL-Pi checkout;
 - `target_project`: project in which Pi will run;
-- install scope: project-local or user-wide;
+- configuration scope: project-local or user-wide (the extension itself registers user-wide);
 - exact SoL-Pi branch and commit.
 
-Do not guess an ambiguous path or install scope.
+Do not guess an ambiguous path or configuration scope.
 
 ## Phase 1: validate the checkout
 
@@ -80,21 +80,38 @@ bun scripts/check-pi-compat.mjs --strict --pi-root "$(npm root -g)"
 
 Require exit status 0. The output must name the installed version; with `--strict`, an untested version fails.
 
-For a project-local registration, run this from `target_project` and substitute the resolved absolute `sol_pi_root`:
+Install the `sol-pi-axi` command from PyPI (Python 3.14 or newer and uv; `<version>` is the SoL-Pi release matching the commit of `sol_pi_root`) and let it register the extension with Pi user-wide:
 
 ```bash
-pi install "/absolute/path/to/SoL-Pi" --local --approve
+uv tool install sol-pi-axi==<version>
+sol-pi-axi install
 pi list --approve
 ```
 
-For a user-wide registration, omit `--local`:
+`sol-pi-axi install` registers `npm:@anthill-tec/sol-pi@<version>` with Pi and writes the agent directory's `sol-pi.json` with the setup defaults when it has none (see "Registering the extension with `sol-pi-axi install`" below). Then configure each project with `sol-pi-axi setup <project dir>` (Phase 3).
+
+Alternatively, register the extension with Pi directly, from npm:
 
 ```bash
-pi install "/absolute/path/to/SoL-Pi" --approve
+pi install npm:@anthill-tec/sol-pi@<version> --approve
 pi list --approve
 ```
 
-The `pi list` output must show the exact SoL-Pi source in the selected scope. Do not install the same checkout in both scopes. A project-local registration must run only in a trusted project; use `--approve` for automated invocations unless trust has already been explicitly persisted.
+The PyPI package `sol-pi-axi` and the npm package `@anthill-tec/sol-pi` share the same release version; `sol-pi-axi install` registers the extension at its own version.
+
+Pi installs an `npm:` source by running `npm`, or the command array in its `npmCommand` setting (for example `["pnpm"]` or `["bun"]`); that command must be on `PATH`.
+
+The `pi list` output must show the exact SoL-Pi source. Do not register SoL-Pi from more than one source. Installing from a checkout is for SoL-Pi development only; see `CONTRIBUTING.md`.
+
+### Registering the extension with `sol-pi-axi install`
+
+`sol-pi-axi install` runs Pi as `$PI_BIN` when it is set, else `pi` on `PATH`; with neither it fails, naming both. Every `pi` command runs from the home directory with `--no-approve`. It registers `npm:@anthill-tec/sol-pi@<version>` unless Pi's `settings.json` already holds exactly that source; an `npm:@anthill-tec/sol-pi` entry at another version is replaced in place by Pi, and other SoL-Pi sources (`npm:sol-pi`, a git or URL source, a local checkout path) are removed with `pi remove` only after `pi install` succeeds. An existing `sol-pi.json` in the agent directory is kept untouched; `--features`, `--reducer` and `--cache-ratio` apply only when the file is written. Its envelope adds `outcome` (`installed`, `unchanged`, `failed` or `cancelled`), `extension` (`source`, `registered`, `replaced`, `pi`), `config` (`path`, `state` `written` or `kept`, and the values) and `context` (`agentDir`); `unchanged` means nothing was registered and nothing written. Require exit status 0 and `ok: true`.
+
+`sol-pi-axi uninstall` removes every SoL-Pi source Pi has registered with `pi remove`, and deletes no configuration file (`warnings` names the agent directory's `sol-pi.json` when it exists). Its envelope adds `outcome` (`removed`, `unchanged`, `failed` or `cancelled`), `removed` (the sources removed) and `context` (`agentDir`).
+
+### The home view's extension
+
+With no verb, the home view also shows the extension: `extension` has `state` (`absent` or `registered`) and the registered `source`. When the registered source is not `npm:@anthill-tec/sol-pi` at `sol-pi-axi`'s own version, the home view warns and adds `sol-pi-axi install` to `help`.
 
 ## Phase 3: configure all four mechanisms
 
@@ -128,13 +145,7 @@ The extension follows Pi's configuration and agent directories as Pi reports the
 
 ### Writing the project file with `sol-pi-axi setup`
 
-For the project-local scope on the official Pi layout, `sol-pi-axi setup` writes the file. Install the command (Python 3.14 or newer and uv; `<version>` is the SoL-Pi release tag of `sol_pi_root`):
-
-```bash
-uv tool install git+https://github.com/anthill-tec/SoL-Pi@<version>
-```
-
-Then, for this all-enabled profile:
+For the project-local scope on the official Pi layout, `sol-pi-axi setup` writes the file, using the `sol-pi-axi` command installed in Phase 2. For this all-enabled profile:
 
 ```bash
 sol-pi-axi setup /absolute/path/to/target_project --features all --reducer provider-id/model-id --cache-ratio 12.5

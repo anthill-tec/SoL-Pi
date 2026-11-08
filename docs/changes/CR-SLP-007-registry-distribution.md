@@ -1,6 +1,6 @@
 # CR-SLP-007 — `@anthill-tec/sol-pi` on npm, `sol-pi-axi install`/`uninstall`, publishing
 
-**Status:** PENDING · Pre-review: ran — touches another project's surface (Model B's install contract, #1554); 8 points or more
+**Status:** COMPLETED · Pre-review: ran — touches another project's surface (Model B's install contract, #1554); 8 points or more
 **Type:** feature
 **Priority:** P1 — 0.1.0 is the first release Model B installs
 **Depends on:** CR-SLP-004, CR-SLP-002, CR-SLP-001
@@ -21,7 +21,8 @@ outside `setup-sol-pi.fish`, which registers a checkout path. `release.yml` publ
 **Surfaces:** `package.json`, `sol_pi_axi/_version.py`, `tests/package.test.ts`.
 
 - `name` `@anthill-tec/sol-pi`; no `private`; `publishConfig` `{"access": "public"}`; `repository`
-  `https://github.com/anthill-tec/SoL-Pi`; `keywords` include `pi-package`.
+  `{"type": "git", "url": "git+https://github.com/anthill-tec/SoL-Pi.git"}` (npm's normalised
+  form); `keywords` include `pi-package`.
 - Two-space indentation.
 - `version` and `__version__` are `0.1.0`.
 - `files`, `pi.extensions`, `peerDependencies` and `dependencies` are unchanged.
@@ -131,7 +132,8 @@ arguments and working directory and edits `settings.json` as `pi install` and `p
 - [ ] **§S1** `bun pm pack --dry-run` lists the same files as on the base branch.
 - [ ] **§S1** The packed tarball, unpacked and loaded by the development dependency's Pi with its
       path as the extension, registers SoL-Pi's tools.
-- [ ] **§S2** Empty agent directory: `install` runs `pi install npm:@anthill-tec/sol-pi@<own
+- [ ] **§S2** An agent directory with no SoL-Pi registration and no `sol-pi.json`, whose
+      `settings.json` names a Pi default provider and model: `install` runs `pi install npm:@anthill-tec/sol-pi@<own
       version>`, writes `sol-pi.json` with the setup defaults, exits 0, `installed`. A second run
       runs no `pi install` or `pi remove`, leaves the file's bytes and modification time, `unchanged`.
 - [ ] **§S2** Every recorded `pi` command ran from the home directory with `--no-approve`.
