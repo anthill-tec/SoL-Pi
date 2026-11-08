@@ -8,6 +8,15 @@ All notable changes to this project are documented in this file. The format is b
 
 ### Added
 
+- `sol-pi-axi`, an installed agent-facing command (Python 3.14+, `uv tool install
+  git+https://github.com/anthill-tec/SoL-Pi@<version>`). `sol-pi-axi setup <project dir>` writes
+  `<project dir>/.pi/sol-pi.json` from the project file, the agent directory's `sol-pi.json` or the
+  setup defaults (all four mechanisms on, ratio 12.5, the reducer on Pi's default provider and
+  model), overridden by `--features`, `--reducer` and `--cache-ratio`; it never prompts, writes
+  atomically, and a signal cancels it leaving nothing behind. Every run prints one TOON envelope
+  (or one JSON line with `--format json`) with documented exit codes; with no verb it prints a
+  home view. It reads `PI_CODING_AGENT_DIR`; the extension still reads no environment variables.
+  Its one runtime dependency is `toon-format` 1.2.0 (MIT).
 - Pi 1.5.0 support: Pi 1.5.0 joins the tested set (0.84.2, 1.0.4, 1.3.0, 1.5.0) as the latest
   tested release, the development dependency and the documented default install.
   `scripts/check-pi-compat.mjs --strict` passes on it, and its mixed-internal-packages warning now
