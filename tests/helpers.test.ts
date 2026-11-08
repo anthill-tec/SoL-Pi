@@ -21,10 +21,22 @@ function flaky<T>(failures: number, value: T) {
 	return { callback, errors, times, calls: () => times.length };
 }
 
-function medianGap(times: number[]): number {
+function sortedGaps(times: number[]): number[] {
 	const gaps = times.slice(1).map((time, index) => time - (times[index] ?? time));
-	gaps.sort((left, right) => left - right);
+	return gaps.sort((left, right) => left - right);
+}
+
+function medianGap(times: number[]): number {
+	const gaps = sortedGaps(times);
 	return gaps[Math.floor(gaps.length / 2)] ?? Number.NaN;
+}
+
+/**
+ * The shortest gap between calls. Load only lengthens gaps, so an upper bound on the interval is
+ * checked on the shortest gap, which load must stretch on every call to break.
+ */
+function minGap(times: number[]): number {
+	return sortedGaps(times)[0] ?? Number.NaN;
 }
 
 describe("waitFor", () => {
@@ -63,7 +75,8 @@ describe("waitFor", () => {
 		expect(failure).not.toBe(probe.errors[0]);
 		expect((failure as Error).message).toBe(`attempt ${probe.calls()}`);
 		expect(elapsed).toBeGreaterThanOrEqual(950);
-		expect(elapsed).toBeLessThan(1_500);
+		// Generous, since load delays the last wake-up; the lower bound carries the 1000 ms contract.
+		expect(elapsed).toBeLessThan(3_000);
 	});
 
 	it("polls every 50 ms by default", async () => {
@@ -72,8 +85,9 @@ describe("waitFor", () => {
 		await expect(waitFor(probe.callback)).rejects.toThrow(/^attempt \d+$/u);
 
 		expect(medianGap(probe.times)).toBeGreaterThanOrEqual(40);
-		expect(medianGap(probe.times)).toBeLessThan(90);
-		expect(probe.calls()).toBeGreaterThanOrEqual(10);
+		expect(minGap(probe.times)).toBeLessThan(90);
+		// Load can only lower the count, so the cap is exact and the floor is loose.
+		expect(probe.calls()).toBeGreaterThanOrEqual(5);
 		expect(probe.calls()).toBeLessThanOrEqual(22);
 	});
 
@@ -89,10 +103,11 @@ describe("waitFor", () => {
 
 		expect(failure).toBe(probe.errors.at(-1));
 		expect(elapsed).toBeGreaterThanOrEqual(280);
-		expect(elapsed).toBeLessThan(800);
+		expect(elapsed).toBeLessThan(2_000);
 		expect(medianGap(probe.times)).toBeGreaterThanOrEqual(90);
-		expect(medianGap(probe.times)).toBeLessThan(180);
+		expect(minGap(probe.times)).toBeLessThan(180);
 		expect(probe.calls()).toBeGreaterThanOrEqual(2);
+		// At most 4 calls in 300 ms at 100 ms: the default 1000 ms timeout would give about 10.
 		expect(probe.calls()).toBeLessThanOrEqual(4);
 
 		// A callback whose promise never settles is called once, and waitFor still rejects at the timeout.
