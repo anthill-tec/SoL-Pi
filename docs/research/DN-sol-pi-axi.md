@@ -84,8 +84,13 @@
   `sol-pi.json` surfaces this way at `session_start`. An npm package's entry lies under
   `<agent dir>/npm/node_modules/<name>`.
 - RPC lists no extensions or tools, and SoL-Pi registers no command, so a clean start does not
-  prove SoL-Pi loaded (a filtered entry, or a missing package, starts cleanly). The check therefore
-  also verifies Pi's record and the package on disk.
+  prove SoL-Pi loaded: a filtered entry, or a missing package, starts cleanly. Pi's resource filters
+  are a glob language (minimatch includes, `!` excludes, `+`/`-` exact overrides, matched on
+  relative, base and absolute paths), so re-implementing them in `sol-pi-axi` would drift. The user
+  ruled (2026-11-09) for a load signal instead: when `SOL_PI_AXI_VERIFY` holds a value, SoL-Pi's
+  `session_start` first calls `ui.notify("sol-pi-axi verify <value>")`, which RPC mode emits as an
+  `extension_ui_request` line; the check requires it, and still checks Pi's record and the package
+  on disk first for a clearer error.
 - SoL-Pi adds no status command: a user-facing SoL-Pi status skill belongs to Model B, the
   umbrella project.
 - Another extension's handler error is a warning; the fish script failed on it.

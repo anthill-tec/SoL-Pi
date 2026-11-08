@@ -4,7 +4,7 @@
 **Type:** feature
 **Priority:** P1 — replaces the fish setup script's smoke test, which CR-SLP-005 removes
 **Depends on:** CR-SLP-007
-**Labels:** setup, cli, axi, python
+**Labels:** setup, cli, axi, python, extension
 **Phase:** 0.1.0 · wave 1
 **Design reference:** `docs/research/DN-sol-pi-axi.md` §D6
 
@@ -12,58 +12,76 @@
 
 `sol-pi-axi install` (CR-SLP-007) registers the extension and writes its configuration, but never
 starts Pi, so a SoL-Pi that fails to load, or loads with an invalid `sol-pi.json`, is reported as
-installed; nothing checks a loaded SoL-Pi without registering it.
+installed; nothing checks a loaded SoL-Pi without registering it. Pi's RPC mode lists no loaded
+extensions, and whether a package's extension loads depends on Pi's resource filters (glob
+includes, `!` excludes, `+`/`-` exact overrides), so only the extension itself can say it loaded.
 
 ## Scope
 
-### §S1 — The check
+### §S1 — The load signal
+
+**Surfaces:** `src/sol-pi/index.ts` (`createSolPiExtension`), a Bun test.
+
+- When the environment variable `SOL_PI_AXI_VERIFY` is a non-empty value, SoL-Pi's `session_start`
+  handler calls `ui.notify("sol-pi-axi verify <value>", "info")` first, before it reads its
+  configuration, so a loaded SoL-Pi signals even when its configuration is invalid. In Pi's RPC
+  mode the call is a standard-output line `{"type":"extension_ui_request","method":"notify",
+  "message":"sol-pi-axi verify <value>",…}`.
+- With the variable unset or empty, SoL-Pi calls nothing extra.
+
+### §S2 — The check
 
 **Surfaces:** `sol_pi_axi/` (a new check module).
 
-- **Pi's record.** The check fails when no SoL-Pi source (CR-SLP-007 §S2) is registered, when the
-  registered entry is an object whose `extensions` filter excludes `src/sol-pi/index.ts`, or when
+- **Pi's record.** The check fails when no SoL-Pi source (CR-SLP-007 §S2) is registered, or when
   the package is not on disk (`<agent dir>/npm/node_modules/@anthill-tec/sol-pi/package.json` for
   the npm source; the path's `package.json` for a local path). `error` names which.
 - **Starting Pi.** `pi --offline --no-approve --mode rpc --no-session`, from the user's home, with
-  one `{"id":"sol-pi-axi","type":"get_state"}` line on standard input, then end of input; bounded
-  at 30 seconds, after which Pi is killed and reaped.
+  `SOL_PI_AXI_VERIFY` set to a value unique to the run and one
+  `{"id":"sol-pi-axi","type":"get_state"}` line on standard input, then end of input; bounded at 30
+  seconds, after which Pi is killed and reaped.
 - **Fails when** Pi exits non-zero (`error` quotes its `Failed to load extension` line), an
-  `extension_error` line's `extensionPath` lies inside the SoL-Pi package directory, or no
-  `get_state` response arrives. Non-JSON standard-output lines are ignored.
+  `extension_error` line's `extensionPath` lies inside the SoL-Pi package directory, no
+  `get_state` response arrives, or no notify line carries the run's value (`error`: Pi started
+  without loading SoL-Pi, for example because a resource filter in `settings.json` excludes it).
+  Non-JSON standard-output lines are ignored.
 - An `extension_error` from another extension is a warning.
-- **Result:** `verify`: `ok` (boolean), `exit` (Pi's exit code, `null` when it was killed or not
-  started), `errors` (list of `{extensionPath, event, error}`).
+- **Result:** `verify`: `ok` (boolean), `loaded` (boolean, the load signal seen), `exit` (Pi's exit
+  code, `null` when it was killed or not started), `errors` (list of
+  `{extensionPath, event, error}`).
 - The check writes no file; Pi may create `auth.json` and `models-store.json` in the agent directory.
 
-### §S2 — `sol-pi-axi verify`
+### §S3 — `sol-pi-axi verify`
 
 **Surfaces:** `sol_pi_axi/` (`verify` verb), help text, valid-verb lists.
 
-- Runs §S1's check; registers nothing and writes no SoL-Pi file.
-- Envelope: `verb: verify`; `outcome` `verified`, `failed` or `cancelled`; `verify` (§S1);
+- Runs §S2's check; registers nothing and writes no SoL-Pi file.
+- Envelope: `verb: verify`; `outcome` `verified`, `failed` or `cancelled`; `verify` (§S2);
   `extension` (`state` `absent` or `registered`, `source`); `context` (`agentDir`).
 - Exit 0 `verified`, 1 `failed`, 130/143/129 `cancelled`. On failure `help[]` has the fix: for no
   registration, `sol-pi-axi install`; for an invalid `<agent dir>/sol-pi.json`, correct it, or delete
   it and run `sol-pi-axi install`; otherwise `sol-pi-axi install` and `sol-pi-axi uninstall`.
 - Takes `--format`; any other flag is a usage error. Pi is found as CR-SLP-007 §S2 finds it.
 
-### §S3 — `install` runs the check
+### §S4 — `install` runs the check
 
 **Surfaces:** `sol_pi_axi/` (`install` verb).
 
-- Every `install` run that ends with the source registered (`installed` or `unchanged`) runs §S1's
+- Every `install` run that ends with the source registered (`installed` or `unchanged`) runs §S2's
   check last; a run that fails or is cancelled earlier does not.
 - A failed check fails the run: exit 1, `failed`, registration and configuration reported as the
-  run left them (nothing removed or rewritten), `help[]` as §S2.
-- `install`'s envelope gains `verify` (§S1), `null` when the run did not reach the check.
+  run left them (nothing removed or rewritten), `help[]` as §S3.
+- `install`'s envelope gains `verify` (§S2), `null` when the run did not reach the check.
 
-### §S4 — Documentation and changelog
+### §S5 — Documentation and changelog
 
-**Surfaces:** `README.md`, `agents-install.md`, `CHANGELOG.md`.
+**Surfaces:** `README.md`, `agents-install.md`, `docs/configuration.md`, `CHANGELOG.md`.
 
 - README and `agents-install.md` document `verify`, the check in `install`, what fails it, the
   `verify` key, and that Pi may create `auth.json` and `models-store.json` in the agent directory.
-- `CHANGELOG.md` `[Unreleased]` records `verify` and the check.
+- README, `agents-install.md` and `docs/configuration.md` say the extension reads one environment
+  variable, `SOL_PI_AXI_VERIFY`, only to answer `sol-pi-axi verify`.
+- `CHANGELOG.md` `[Unreleased]` records `verify`, the check and the load signal.
 
 ## Acceptance criteria
 
@@ -71,31 +89,40 @@ Real-Pi cases run the development dependency's `pi` through `$PI_BIN`, offline, 
 agent directory and home registering the checkout as a local path. Stub cases extend CR-SLP-007's
 stub `pi` to answer `--mode rpc`.
 
-- [ ] **§S1** Real Pi, valid `sol-pi.json`: `verify` reports `verified`, `verify.ok` true,
-      `verify.exit` 0, `verify.errors` empty, exit 0.
-- [ ] **§S1** Real Pi, agent-directory `sol-pi.json` `{"version":2}`: `verify` exits 1, `failed`, one
-      `verify.errors` entry with `event` `session_start`, `help[]` naming the file; the file's bytes
-      are unchanged.
-- [ ] **§S1** Real Pi: a second registered extension that throws on load fails the check, `error`
+- [ ] **§S1** Bun, a real Pi agent session (faux model) with SoL-Pi loaded and `SOL_PI_AXI_VERIFY=n1`:
+      `session_start` notifies exactly `"sol-pi-axi verify n1"` at `info`, before reading the
+      configuration (it still notifies with an invalid `sol-pi.json`); with the variable unset or
+      empty, SoL-Pi makes no such call.
+- [ ] **§S2** Real Pi, valid `sol-pi.json`: `verify` reports `verified`, `verify.ok` true,
+      `verify.loaded` true, `verify.exit` 0, `verify.errors` empty, exit 0.
+- [ ] **§S2** Real Pi, agent-directory `sol-pi.json` `{"version":2}`: `verify` exits 1, `failed`,
+      `verify.loaded` true, one `verify.errors` entry with `event` `session_start`, `help[]` naming
+      the file; the file's bytes are unchanged.
+- [ ] **§S2** Real Pi: the SoL-Pi entry with `"extensions": []`, and with `"extensions":
+      ["!**/index.ts"]`, each fail with exit 1, `verify.loaded` false, `error` saying Pi started
+      without loading SoL-Pi.
+- [ ] **§S2** Real Pi: a second registered extension that throws on load fails the check, `error`
       naming its path; one that throws in `session_start` gives `verified` with a warning naming its
       path.
-- [ ] **§S1** Real Pi: a trusted home whose `~/.pi/settings.json` registers a throwing extension
+- [ ] **§S2** Real Pi: a trusted home whose `~/.pi/settings.json` registers a throwing extension
       gives `verified`.
-- [ ] **§S1** No SoL-Pi entry, an entry with `"extensions": []`, and an npm entry with no package
-      directory each fail with exit 1 before any `--mode rpc` start (the stub records none), `error`
-      naming the cause; no SoL-Pi entry has `sol-pi-axi install` in `help[]`.
-- [ ] **§S1** Stub: an RPC start that never answers fails after the bound with `verify.exit` `null`
-      and no `pi` process left; non-JSON standard-output lines are ignored.
-- [ ] **§S2** `verify` runs no `pi install` or `pi remove` (the stub records none), and the agent
+- [ ] **§S2** No SoL-Pi entry, and an npm entry with no package directory, each fail with exit 1
+      before any `--mode rpc` start (the stub records none), `error` naming the cause; no SoL-Pi entry
+      has `sol-pi-axi install` in `help[]`.
+- [ ] **§S2** Stub: an RPC start that never answers fails after the bound with `verify.exit` `null`
+      and no `pi` process left; non-JSON standard-output lines are ignored; a notify carrying another
+      run's value does not count as loaded.
+- [ ] **§S3** `verify` runs no `pi install` or `pi remove` (the stub records none), and the agent
       directory's SoL-Pi files and `settings.json` keep their bytes and modification times; any
       flag but `--format` exits 2.
-- [ ] **§S3** Real Pi: `install` reports `installed` with `verify.ok` true; a second run reports
+- [ ] **§S4** Real Pi: `install` reports `installed` with `verify.ok` true; a second run reports
       `unchanged` with a non-`null` `verify`; with `{"version":2}` it exits 1, `failed`, the file
       unchanged; a run failing before registering has `verify` `null`.
-- [ ] **§S3** `git grep -n -- '--mode rpc' sol_pi_axi/` returns at least one non-test line, called
+- [ ] **§S4** `git grep -n -- '--mode rpc' sol_pi_axi/` returns at least one non-test line, called
       from both `verify` and `install`.
-- [ ] **§S4** `tests/install-guide.test.ts` checks README and `agents-install.md` for `verify` and
-      the check; `CHANGELOG.md` `[Unreleased]` names both.
+- [ ] **§S5** `tests/install-guide.test.ts` checks README and `agents-install.md` for `verify` and
+      the check, and README, `agents-install.md` and `docs/configuration.md` for
+      `SOL_PI_AXI_VERIFY`; `CHANGELOG.md` `[Unreleased]` names `verify`, the check and the signal.
 - [ ] **Gate** The Bun and the Python `pre-merge-gate` both pass.
 
 ## Estimated size
@@ -109,6 +136,7 @@ stub `pi` to answer `--mode rpc`.
 
 ## Non-goals
 
-- A SoL-Pi status command or skill.
+- A SoL-Pi status command or skill; any user-visible effect of the load signal outside
+  `sol-pi-axi verify`.
 - Running the check from `setup` or the home view.
 - Failing on another extension's handler error.
