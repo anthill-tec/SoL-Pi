@@ -15,6 +15,21 @@ invocation (its arguments and working directory) and edits `settings.json` as Pi
   standard error and exit 1.
 - `-l`/`--local` (a project-scope change) and any other command exit 97: nothing in these runs may
   ask Pi for one.
+- `--mode rpc` (CR-SLP-008's check) answers as Pi 1.5.0's RPC mode does with SoL-Pi loaded: it
+  writes its process id to `<directory>-rpc.pid`, appends its standard input (read to its end) to
+  `<directory>-rpc-stdin.jsonl`, prints the `rpc` control's `junk` lines (non-JSON; `{value}`
+  replaced by the run's value), a notify
+  `extension_ui_request` carrying `sol-pi-axi verify <the run's $SOL_PI_AXI_VERIFY>` (`notify`
+  `own`, the default; `previous` carries the previous `--mode rpc` run's value instead; `none`
+  prints no notify), an `extension_error` line for each of `extension_errors`, and a `response`
+  to each `get_state` command it read (none with `respond` false), then prints `stderr` on standard error and exits with
+  `exit` (default 0; a non-zero `exit` prints nothing on standard output, as a Pi that failed to
+  load an extension). `hang` never answers and never exits; `dialog` (`{method, title}`) prints
+  a dialog `extension_ui_request` and then never answers or exits, as Pi blocked in
+  `session_start`.
+- `install <npm source>` also creates the package's directory under
+  `<agent dir>/npm/node_modules/<name>` with a `package.json` (an existing one, or a symbolic
+  link standing in for the package, is left alone), as Pi's npm install does.
 
 The agent directory is `$PI_CODING_AGENT_DIR` (a leading `~` expanded) else `~/.pi/agent`, as
 Pi's; `settings_dir` in the control file makes the stub act on another directory instead (a Pi
@@ -61,7 +76,59 @@ agent = control.get("settings_dir") or os.path.expanduser(
 with open(LOG, "a", encoding="utf-8") as handle:
     handle.write(json.dumps({{"argv": argv, "cwd": os.getcwd(),
                              "agentConfigExisted": os.path.lexists(
-                                 os.path.join(agent, "sol-pi.json"))}}) + "\n")
+                                 os.path.join(agent, "sol-pi.json")),
+                             "verifyValue": os.environ.get("SOL_PI_AXI_VERIFY")}}) + "\n")
+
+if "--mode" in argv:
+    import time
+    rpc = control.get("rpc") or {{}}
+    Path(LOG[:-len("-calls.jsonl")] + "-rpc.pid").write_text(str(os.getpid()), encoding="utf-8")
+    last_file = Path(LOG[:-len("-calls.jsonl")] + "-rpc-last-value")
+    previous = last_file.read_text(encoding="utf-8") if last_file.exists() else "another-run"
+    value = os.environ.get("SOL_PI_AXI_VERIFY", "")
+    last_file.write_text(value, encoding="utf-8")
+
+    def emit(obj):
+        sys.stdout.write((obj if isinstance(obj, str) else json.dumps(obj)) + "\n")
+        sys.stdout.flush()
+
+    def forever():
+        while True:
+            time.sleep(3600)
+
+    if rpc.get("exit"):
+        if rpc.get("stderr"):
+            sys.stderr.write(rpc["stderr"] + "\n")
+        sys.exit(rpc["exit"])
+    for line in rpc.get("junk", []):
+        emit(line.replace("{{value}}", value))
+    if rpc.get("hang"):
+        forever()
+    if rpc.get("dialog"):
+        emit({{"type": "extension_ui_request", "id": "dialog-1", **rpc["dialog"]}})
+        forever()
+    notify = rpc.get("notify", "own")
+    if notify != "none":
+        carried = value if notify == "own" else previous
+        emit({{"type": "extension_ui_request", "id": "notify-1", "method": "notify",
+              "message": f"sol-pi-axi verify {{carried}}", "notifyType": "info"}})
+    for error in rpc.get("extension_errors", []):
+        emit({{"type": "extension_error", **error}})
+    text = sys.stdin.read()
+    with open(LOG[:-len("-calls.jsonl")] + "-rpc-stdin.jsonl", "a", encoding="utf-8") as handle:
+        handle.write(json.dumps(text) + "\n")
+    for line in text.splitlines():
+        try:
+            command = json.loads(line)
+        except ValueError:
+            continue
+        if (isinstance(command, dict) and command.get("type") == "get_state"
+                and rpc.get("respond", True)):
+            emit({{"id": command.get("id"), "type": "response", "command": "get_state",
+                  "success": True, "data": {{"isStreaming": False}}}})
+    if rpc.get("stderr"):
+        sys.stderr.write(rpc["stderr"] + "\n")
+    sys.exit(0)
 
 if "--version" in argv or "-v" in argv:
     print(control["version"])
@@ -139,6 +206,13 @@ if command == "install":
         normalized = os.path.relpath(resolved, agent)
     else:
         normalized = source
+        if source.startswith("npm:"):
+            name = key(source, agent)[4:]
+            package_dir = Path(agent) / "npm" / "node_modules" / name
+            package_dir.mkdir(parents=True, exist_ok=True)
+            if not (package_dir / "package.json").exists():
+                (package_dir / "package.json").write_text(
+                    json.dumps({{"name": name, "version": "0.0.0-stub"}}), encoding="utf-8")
     index = next((i for i, entry in enumerate(packages)
                   if key(entry_source(entry), agent) == wanted), None)
     if index is None:
@@ -169,6 +243,8 @@ class StubPi:
         self.path = self.bin_dir / "pi"
         self.control_file = Path(root) / f"{directory}-control.json"
         self.log = Path(root) / f"{directory}-calls.jsonl"
+        self.pid_file = Path(root) / f"{directory}-rpc.pid"
+        self.stdin_log = Path(root) / f"{directory}-rpc-stdin.jsonl"
         self.path.write_text(
             f"#!{sys.executable}\n"
             + _STUB_PROGRAM.format(control=repr(str(self.control_file)), log=repr(str(self.log))),
@@ -177,11 +253,32 @@ class StubPi:
         self.configure()
 
     def configure(self, *, version: str = "1.5.0", install_exit: int = 0, remove_exit: int = 0,
-                  settings_dir: Path | None = None) -> None:
+                  settings_dir: Path | None = None, rpc: dict | None = None) -> None:
+        """`rpc` controls a `--mode rpc` start (see the module docstring): `notify` (`own`,
+        `previous`, `none`), `junk`, `extension_errors`, `respond`, `hang`, `dialog`, `exit`,
+        `stderr`."""
         self.control_file.write_text(json.dumps({
             "version": version, "install_exit": install_exit, "remove_exit": remove_exit,
             "settings_dir": str(settings_dir) if settings_dir is not None else None,
+            "rpc": rpc or {},
         }), encoding="utf-8")
+
+    def rpc_calls(self) -> list[dict]:
+        """The recorded `--mode rpc` starts, in order."""
+        return [call for call in self.calls() if "--mode" in call["argv"]]
+
+    def rpc_inputs(self) -> list[str]:
+        """The standard input each answering `--mode rpc` start read, in order."""
+        if not self.stdin_log.exists():
+            return []
+        return [json.loads(line) for line in
+                self.stdin_log.read_text(encoding="utf-8").splitlines()]
+
+    def rpc_pid(self) -> int | None:
+        """The process id of the last `--mode rpc` start, None when none started."""
+        if not self.pid_file.exists():
+            return None
+        return int(self.pid_file.read_text(encoding="utf-8"))
 
     def calls(self) -> list[dict]:
         """Every recorded invocation, in order: `{"argv": [...], "cwd": "...",
