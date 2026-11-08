@@ -10,6 +10,7 @@ that fixes it when one does."""
 
 import json
 import os
+import shutil
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -190,6 +191,22 @@ class SetupInvalidInputTest(SetupTestCase):
         self.tree.settings_file.write_text("{", encoding="utf-8")
         self.assert_fails_changing_nothing(self.tree.settings_file)
         self.assertFalse(self.tree.pi_dir.exists())
+
+    def test_malformed_settings_json_is_not_read_when_the_setup_defaults_need_no_pi_route(self):
+        # Read only when the setup defaults enable the reducer and no --reducer is given.
+        cases = {
+            "reducer off": ({"features": ["actionFusion"]}, values(
+                ["actionFusion"], default_reducer_provider(), default_reducer_model())),
+            "--reducer given": ({"reducer": ("openrouter", "qwen3")}, values(
+                feature_keys(), "openrouter", "qwen3")),
+        }
+        for name, (kwargs, expected) in cases.items():
+            with self.subTest(case=name):
+                shutil.rmtree(self.tree.pi_dir, ignore_errors=True)
+                self.tree.settings_file.write_text("{", encoding="utf-8")
+                result = self.run_setup(**kwargs)
+                self.assertEqual(result.outcome, "written")
+                self.assertEqual(self.tree.project_file.read_bytes(), render_js(expected))
 
     def test_a_settings_json_with_an_array_root_fails(self):
         self.tree.write_settings([{"defaultProvider": PI_PROVIDER, "defaultModel": PI_MODEL}])
