@@ -85,13 +85,13 @@ def npm_package(source: str) -> str | None:
 
 
 def _repository(source: str) -> str | None:
-    """`owner/repo` (lower-cased, `.git` dropped) of a git or URL source, else None."""
+    """`owner/repo` (lower-cased, `.git` dropped) of a git or URL source, else None. An scp-like
+    `git@host:owner/repo` is a git source only after `git:`: without it Pi's `parseSource` reads
+    it as a local path."""
     if source.startswith("git:"):
         rest = source[4:]
     elif "://" in source:
         rest = source.split("://", 1)[1]
-    elif source.startswith("git@"):
-        rest = source
     else:
         return None
     if rest.startswith("git@"):

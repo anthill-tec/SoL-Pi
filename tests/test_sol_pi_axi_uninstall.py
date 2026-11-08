@@ -61,6 +61,24 @@ class UninstallStubTest(UninstallTestCase):
         self.assertEqual(self.packages(), ["npm:pi-unrelated@1.0.0", "../other-local"])
         self.assert_every_pi_call_from_home_with_no_approve()
 
+    def test_an_unprefixed_scp_source_is_a_local_path_as_pi_parses_it(self):
+        # Pi 1.5.0's parseSource reads `git@host:owner/repo` without `git:` as a local path
+        # (isLocalPath), stored relative to the agent directory: it is SoL-Pi only when that
+        # directory's package.json names it, and is then removed by its absolute path.
+        scp = "git@github.com:anthill-tec/SoL-Pi"
+        prefixed = "git:git@github.com:anthill-tec/SoL-Pi.git"
+        self.tree.write_settings({"packages": [scp, prefixed]})
+        envelope = self.assert_envelope(self.sol("uninstall"), "removed", 0)
+        self.assertEqual(self.pi.commands(), [["remove", prefixed]])
+        self.assertEqual(envelope["removed"], [prefixed])
+        self.assertEqual(self.packages(), [scp])
+
+        write_local_package(self.tree.agent / scp, "sol-pi")
+        envelope = self.assert_envelope(self.sol("uninstall"), "removed", 0)
+        self.assertEqual(self.pi.commands()[1:], [["remove", str(self.tree.agent / scp)]])
+        self.assertEqual(envelope["removed"], [scp])
+        self.assertEqual(self.packages(), [])
+
     def test_another_version_of_the_scoped_package_is_removed(self):
         old = f"npm:{NPM_PACKAGE}@0.0.9"
         self.tree.write_settings({"packages": [old]})
