@@ -1,10 +1,10 @@
 # CR-SLP-002 — Support Pi 1.5.0; clear the `undici` advisories
 
-**Status:** PENDING · Pre-review: ran — touches another project's surface (Model B's setup step runs the strict Pi compatibility check, message #1516 item 5)
+**Status:** PENDING · Pre-review: ran — touches another project's surface (Model B's setup step runs the strict Pi compatibility check, message #1516 item 5); re-scoped 2026-11-04 (the setup script's Pi lookup removed: CR-SLP-005 retires the script)
 **Type:** maintenance
 **Priority:** P1 — Model B projects on Pi 1.5.0 cannot finish SoL-Pi's setup
 **Depends on:** CR-SLP-001
-**Labels:** compatibility, dependencies, security, setup, docs
+**Labels:** compatibility, dependencies, security, docs
 **Phase:** 0.1.0 · wave 1
 **Design reference:** `docs/compatibility.md`; Model B's request, Sandesh message #1516 item 5
 
@@ -36,11 +36,10 @@ Pi 1.4.0 and 1.5.0 change behaviour SoL-Pi meets:
   package's root, matching its version headings against `package.json` `version`.
 - **Codemode** queues scripts for a free worker instead of failing at the worker limit.
 
-`setup-sol-pi.fish`, the reported failure (#1516 item 5), runs the check with `--strict` against
-a Pi it finds by guessing: the checkout's own `node_modules`, a list of home directories, and
-`npm root -g`. It never looks where Bun installs Pi, and its last two lookups test a
-`package.json` file with `test -d`, so they never match. Its `pi` binary search also skips
-`~/.bun/bin`.
+The failure Model B reported (#1516 item 5) is in `setup-sol-pi.fish`, which runs the check with
+`--strict` against a Pi it finds by guessing directories. CR-SLP-005 retires that script, and
+CR-SLP-007's `sol-pi-axi install` reads the version of the `pi` that runs and warns when it is
+outside the tested set this CR extends.
 
 ## Scope
 
@@ -78,19 +77,7 @@ a Pi it finds by guessing: the checkout's own `node_modules`, a list of home dir
 - For extension changelogs, the decision covers how SoL-Pi's `CHANGELOG.md` version headings meet
   Pi's matching once a release adds them.
 
-### §S4 — The setup script checks the Pi that runs
-
-**Surfaces:** `setup-sol-pi.fish`.
-
-- The script finds Pi from the `pi` on `PATH` (or `$PI_BIN` when set): it resolves the command's
-  real path and walks up to the `@earendil-works/pi-coding-agent` package directory. It runs the
-  version check and the `--strict` compatibility check against that package, in place of the
-  guessed directories.
-- With no `pi` on `PATH` and no `$PI_BIN`, or no package found above the binary, it fails with a
-  message naming what it tried.
-- The strict check stays: a Pi release outside the tested set fails the setup until a CR adds it.
-
-### §S5 — Documentation and changelog
+### §S4 — Documentation and changelog
 
 **Surfaces:** `README.md`, `agents-install.md`, `docs/compatibility.md`, `THIRD_PARTY_NOTICES.md`,
 `CHANGELOG.md`.
@@ -98,8 +85,7 @@ a Pi it finds by guessing: the checkout's own `node_modules`, a list of home dir
 - Pi 1.5.0 is the latest tested release and the documented default install; 1.3.0, 1.0.4 and
   0.84.2 stay listed as tested.
 - `THIRD_PARTY_NOTICES.md` lists the four Pi packages at 1.5.0.
-- `CHANGELOG.md` `[Unreleased]` records Pi 1.5.0 support, the `undici` fix and the setup script's
-  Pi lookup.
+- `CHANGELOG.md` `[Unreleased]` records Pi 1.5.0 support and the `undici` fix.
 
 ## Acceptance criteria
 
@@ -120,33 +106,27 @@ a Pi it finds by guessing: the checkout's own `node_modules`, a list of home dir
       runs every test CR-SLP-001's fidelity criteria name, and adds no skip.
 - [ ] **§S3** `docs/compatibility.md` lists the three Pi 1.4/1.5 changes from Context, and any the
       §S2 run found, each with a decision; each decision that states behaviour names its test.
-- [ ] **§S4** In a temporary home with a fake `pi` on `PATH` whose real path lies inside a fake
-      Pi 1.5.0 package, the script's Pi lookup resolves that package, whether the package sits
-      under a Bun global or an npm global layout; with no `pi` on `PATH` it fails naming what it
-      tried.
-- [ ] **§S4** `setup-sol-pi.fish` contains none of the guessed home-directory lists and no
-      `test -d` on a `package.json` path.
-- [ ] **§S5** `tests/install-guide.test.ts` passes; README, `agents-install.md` and
+- [ ] **§S4** `tests/install-guide.test.ts` passes; README, `agents-install.md` and
       `docs/compatibility.md` each name the four tested versions; the four Pi rows of the
       `THIRD_PARTY_NOTICES.md` table read 1.5.0.
-- [ ] **§S5** `CHANGELOG.md` `[Unreleased]` has entries for Pi 1.5.0 support, the `undici`
-      advisories and the setup script's Pi lookup.
+- [ ] **§S4** `CHANGELOG.md` `[Unreleased]` has entries for Pi 1.5.0 support and the `undici`
+      advisories.
 - [ ] **Gate** `pre-merge-gate` passes. A new high advisory against a package other than `undici`
       found while this CR is open does not block it; it is filed as its own CR.
 
 ## Estimated size
 
-5 points. The version bump and docs are mechanical; the setup script's lookup, the indirect
-internal-package check and the reviewed change list add work, and the suite's result on Pi 1.5.0
-is the uncertainty.
+3 points. The version bump and docs are mechanical; the indirect internal-package check and the
+reviewed change list add work, and the suite's result on Pi 1.5.0 is the uncertainty. (5 before
+the setup script's Pi lookup was removed.)
 
 ## Risks
 
 - The suite runs on one Pi version at a time. Claims for 1.3.0, 1.0.4 and 0.84.2 rest on earlier
   runs; this CR does not re-run them.
 - A Pi 1.5.0 difference that needs a design change in a mechanism becomes its own CR.
-- Model B reaches SoL-Pi through an installed release (CR-SLP-004), so #1516 item 5 is closed for
-  Model B when this CR, CR-SLP-004 and release 0.1.0 have landed.
+- Model B reaches SoL-Pi through an installed release (CR-SLP-004, CR-SLP-007), so #1516 item 5 is
+  closed for Model B when this CR, CR-SLP-005, CR-SLP-007 and release 0.1.0 have landed.
 
 ## Non-goals
 
@@ -154,4 +134,4 @@ is the uncertainty.
 - A CI matrix over Pi versions.
 - Adopting Pi 1.4/1.5 features (`PI_CODEMODE_MAX_WORKERS`, `collapseChangelog`, `pi-schema`
   schemas).
-- The setup script's other phases and its project mode (CR-SLP-004).
+- The setup script, which CR-SLP-005 retires.

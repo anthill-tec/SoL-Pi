@@ -275,8 +275,8 @@ docs, scripts, examples and the setup script.
 ## Non-goals
 
 - The star-history workflow's renderer, a third-party project with its own pnpm toolchain.
-- Where `setup-sol-pi.fish` looks for an installed Pi (CR-SLP-002), and its project mode and other
-  behaviour (CR-SLP-004).
+- Where `setup-sol-pi.fish` looks for an installed Pi, and its project mode and other behaviour;
+  CR-SLP-005 retires the script.
 - Pi 1.5.0 support (CR-SLP-002).
 - The runtime Pi uses to load SoL-Pi: SoL-Pi stays a Pi extension that Node and Bun both load.
 - The reducer recognising `bun test` as a diagnostic command (its own CR if wanted).
