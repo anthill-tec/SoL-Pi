@@ -101,8 +101,6 @@ list, help text and valid-flag lists.
 - **Behaviour not carried over**, each stated in the changelog's mapping:
   - the strict compatibility check that failed the setup on an untested Pi becomes a warning in
     `install` (CR-SLP-007);
-  - the post-install smoke test (Pi started offline, its output searched for extension errors) is
-    dropped;
   - `--uninstall`'s restore from `sol-pi.json.bak` is dropped: `uninstall` deletes no
     configuration file, and a leftover `.bak` is named by `setup`;
   - registering the local checkout is replaced by the npm source; developing from a checkout is
@@ -192,4 +190,5 @@ references, and docs.
 - Prompts without `--interactive`.
 - Changing what `install` registers or what the setup defaults are.
 - A replacement for the script's checkout validation outside `bun run check` and `bun audit`.
-- A post-install smoke test, and a strict (failing) Pi compatibility check in `install`.
+- A strict (failing) Pi compatibility check in `install`. (The post-install smoke test is carried
+  over by CR-SLP-007.)

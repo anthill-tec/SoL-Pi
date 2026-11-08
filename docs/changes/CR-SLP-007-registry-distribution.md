@@ -1,6 +1,6 @@
 # CR-SLP-007 — Registry distribution: `@anthill-tec/sol-pi` on npm, `sol-pi-axi install` and publishing
 
-**Status:** PENDING · Pre-review: ran — touches another project's surface (Model B's contract names the install commands, message #1534); new CR; release workflow and two public registries
+**Status:** PENDING · Pre-review: due — touches another project's surface (Model B's contract names the install commands, message #1534); new CR; release workflow and two public registries; re-scoped 2026-11-04 (the fish script's post-install smoke test carried over, §S2 Verifying)
 **Type:** feature
 **Priority:** P1 — 0.1.0 is the first release Model B installs; it must come from the registries
 **Depends on:** CR-SLP-004, CR-SLP-002 (the tested Pi versions this CR mirrors), CR-SLP-001
@@ -34,6 +34,20 @@ with `source` and filters). An npm source replaces, in place and keeping the ent
 an entry for the same package name at any version. A local path is stored relative to the agent
 directory, while `pi remove <path>` resolves its argument against the working directory.
 `pi --version` prints the bare version.
+
+**Starting Pi without a terminal** (measured on Pi 1.5.0 in a temporary agent directory, offline).
+`pi --offline --mode rpc --no-session` loads every registered extension, runs `session_start`,
+answers commands on standard input as JSON lines (a `get_state` command gets one `response` line)
+and exits when standard input closes. An extension that throws while loading stops Pi: it exits 1
+with `Failed to load extension "<path>": <reason>` on standard error. An extension that throws in a
+handler is reported as a standard-output line
+`{"type":"extension_error","extensionPath":...,"event":...,"error":...}` and Pi carries on; an
+invalid agent-directory `sol-pi.json` surfaces this way, at `session_start`. No model call is made.
+
+**The fish script's smoke test** (`setup-sol-pi.fish`, its "Verify installation" phase) starts
+`pi --offline --approve` with no input for three seconds and fails the setup when its output
+mentions an extension error or a failed load. The user ruled (2026-11-04) that `install` carries
+it over.
 
 **Release workflow.** `.github/workflows/release.yml` is rendered by `modelb-axi release-workflow`
 from `PROJECT_STACKS` and `RELEASE_TARGETS`. Rendered for `bun,python` and `pypi,npm` it adds a
@@ -101,9 +115,20 @@ indent. CR-SLP-001 sets `test-bun`'s `bun-version: 1.4.4` and its command
   `extension` reports the registration state as the run left it (`source` registered or not, and
   `replaced`). A configuration write that fails after registering fails the run with the
   registration reported.
+- **Verifying.** Every run that ends with the source registered (`installed` or `unchanged`) then
+  starts Pi the way Context measured: `pi --offline --mode rpc --no-session`, from the user's home,
+  with one `get_state` command on standard input followed by its end, bounded at 30 seconds. The
+  check fails when Pi exits non-zero, when a `Failed to load extension` line names SoL-Pi's
+  entry (`src/sol-pi/index.ts` of the registered package), when an `extension_error` line names it,
+  or when no `get_state` response arrives in time. An `extension_error` or load failure naming
+  another extension is reported in `warnings` (a load failure of another extension also stops Pi,
+  so the check fails with that extension named). A failed check fails the run: exit 1, `failed`,
+  `error` naming what Pi reported, the registration and the configuration reported as the run left
+  them, and `help[]` naming `sol-pi-axi setup`'s validation route and `sol-pi-axi uninstall`.
 - **Envelope.** `verb: install`, with `outcome` (`installed`, `unchanged`, `failed`,
   `cancelled`), `extension` (`source`, `replaced` as the list of removed sources, `pi` as Pi's
-  version), `config` (`path`, `state` `written` or `kept`, and the values as `setup` reports them),
+  version), `verify` (`ok`, and `errors` as the extension errors Pi reported, each with its
+  `extensionPath`, `event` and `error`; `null` when the run did not reach the check), `config` (`path`, `state` `written` or `kept`, and the values as `setup` reports them),
   and `context` (`agentDir`). `unchanged` means nothing was registered and nothing written.
   `help[]` after `installed` carries `sol-pi-axi setup <project dir>`. Exit codes, signals, channels
   and unknown input follow CR-SLP-004 §S4; `--non-interactive` and `--format` are accepted.
@@ -198,6 +223,13 @@ records its arguments and edits `settings.json` the way `pi install` and `pi rem
 - [ ] **§S2** Against the real `pi` of the development dependency (through `$PI_BIN`) and a temporary
       agent directory, with no network: a local-path source registered by `pi install` is found as
       a SoL-Pi source and removed by `uninstall` from another working directory.
+- [ ] **§S2** Against the real `pi` and a temporary agent directory registering the checkout: the
+      check passes with a valid `sol-pi.json` (`verify.ok` true, no errors); an agent-directory
+      `sol-pi.json` with `"version": 2` fails the run with the `session_start` error in
+      `verify.errors`; a second registered extension that throws on load fails the run naming it;
+      a second extension that throws in `session_start` passes with a warning naming it.
+- [ ] **§S2** With the stub `pi`, a `--mode rpc` that never answers fails the run after the bound,
+      and a run that fails before registering never starts the check (`verify` is `null`).
 - [ ] **§S2** An existing valid `sol-pi.json` is kept byte for byte, with value flags named as not
       applied; an invalid one is kept and named; a missing reducer default with no `--reducer`
       fails before any `pi` command runs.
@@ -228,10 +260,11 @@ records its arguments and edits `settings.json` the way `pi install` and `pi rem
 
 ## Estimated size
 
-8 points. The npm package's metadata and pack check, two verbs that drive `pi` through a stub and
-one real-Pi round trip, the recognition and safe replacement of earlier SoL-Pi sources, the home
-view's extension state, the rendered workflow with its hand edits and a test that pins them, and
-the install docs.
+13 points, at the cap (8 before the review's failure paths and the smoke test). The npm package's
+metadata and pack check, two verbs that drive `pi` through a stub and real-Pi round trips, the
+recognition and safe replacement of earlier SoL-Pi sources, the post-install check of a running
+Pi, the home view's extension state, the rendered workflow with its hand edits and a test that
+pins them, and the install docs.
 
 ## Risks
 
