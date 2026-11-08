@@ -250,9 +250,11 @@ and prints zero as `+0`; Bun does not.
       `CRUCIBLE_PROJECT_KEY` and the variable removed from the environment (`env -u
       CRUCIBLE_PROJECT_KEY`), `bun -e 'console.log(process.env.CRUCIBLE_PROJECT_KEY ?? "unset")'`
       prints `unset`.
-- [ ] **§S6** `git grep -n -E '\bnpx\b|\bnpm (ci|run|test|audit|pack|install)\b|\bnode scripts/|vitest' -- . ':!docs/changes' ':!CHANGELOG.md' ':!tests/action-fusion.test.ts' ':!tests/evidence-preserving-reducer.test.ts' ':!.github/workflows/star-history.yml'`
+- [ ] **§S6** `git grep -n -E '\bnpx\b|\bnpm (ci|run|test|audit|pack|install)\b|\bnode scripts/|vitest' -- . ':!docs/changes' ':!CHANGELOG.md' ':!tests/action-fusion.test.ts' ':!tests/evidence-preserving-reducer.test.ts' ':!.github/workflows/star-history.yml' ':!tests/install-guide.test.ts'`
       returns nothing, apart from the npm alternative for installing Pi that §S6 keeps. The
-      star-history workflow bootstraps the third-party renderer's own pnpm toolchain (a non-goal). The two
+      star-history workflow bootstraps the third-party renderer's own pnpm toolchain (a non-goal);
+      `tests/install-guide.test.ts` holds the forbidden-command pattern and the npm alternative as
+      test data. The two
       excluded files use `npm test` as a `then_run` command in their test data, which the
       reducer's diagnostic-command rule matches.
 - [ ] **§S6** The parts of `bun run check` each pass: the client's `check` (typecheck), the
