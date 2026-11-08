@@ -86,16 +86,22 @@ npm install --global @earendil-works/pi-coding-agent@1.5.0
 
 Pi 1.3.0 and 0.84.2 remain supported and tested; install `@earendil-works/pi-coding-agent@1.3.0` or `@earendil-works/pi-coding-agent@0.84.2` instead to stay on one of them.
 
-Then install SoL-Pi directly from [NVlabs/SoL-Pi](https://github.com/NVlabs/SoL-Pi):
+Then install SoL-Pi directly from [anthill-tec/SoL-Pi](https://github.com/anthill-tec/SoL-Pi):
 
 ```bash
-pi install git:github.com/NVlabs/SoL-Pi
+pi install git:github.com/anthill-tec/SoL-Pi
 ```
 
 To install it only for the current project, use the project-local scope:
 
 ```bash
-pi install git:github.com/NVlabs/SoL-Pi --local --approve
+pi install git:github.com/anthill-tec/SoL-Pi --local --approve
+```
+
+To write a project's configuration from the command line (or from a coding agent), install the `sol-pi-axi` command as well. It needs Python 3.14 or newer and [uv](https://docs.astral.sh/uv/); `<version>` is a SoL-Pi release tag:
+
+```bash
+uv tool install git+https://github.com/anthill-tec/SoL-Pi@<version>
 ```
 
 ### Configure
@@ -120,7 +126,32 @@ The following conservative configuration enables only the two local mechanisms t
 }
 ```
 
-Enable additional mechanisms only after reviewing their configuration and security implications. SoL-Pi uses no dedicated environment variables; feature flags, the reducer provider/model route, and the compaction ratio are configured in `sol-pi.json`. See [sol-pi.example.json](sol-pi.example.json) for a template listing every key.
+Enable additional mechanisms only after reviewing their configuration and security implications. The extension reads no dedicated environment variables; feature flags, the reducer provider/model route, and the compaction ratio are configured in `sol-pi.json`. The `sol-pi-axi` command reads `PI_CODING_AGENT_DIR` to find the agent directory (default `~/.pi/agent`). See [sol-pi.example.json](sol-pi.example.json) for a template listing every key.
+
+### `sol-pi-axi setup`
+
+`sol-pi-axi setup <project dir>` writes `<project dir>/.pi/sol-pi.json` (creating `.pi/` when missing) and nothing else. It never prompts. Its base values are a valid project file's values, else the agent directory's `sol-pi.json`, else the setup defaults: all four mechanisms on, ratio 12.5, and the reducer on Pi's `defaultProvider` and `defaultModel` from the agent directory's `settings.json`. With no value flag, a valid project file is left `unchanged`. The flags override the base values:
+
+| Flag | Value |
+|---|---|
+| `--features` | `all`, `none`, or a comma list of `actionFusion`, `observationPack`, `evidencePreservingReducer`, `onlineContextCompact`; unlisted ones off |
+| `--reducer` | `<provider>/<model>`, split at the first `/` |
+| `--cache-ratio` | digits with an optional decimal fraction |
+| `--format` | `toon` (default) or `json` |
+| `--non-interactive` | accepted, no effect |
+| `-h`, `--help` | plain-text help |
+| `-v`, `-V`, `--version` | the bare version |
+
+```bash
+sol-pi-axi setup . --features actionFusion,observationPack --cache-ratio 8
+sol-pi-axi setup ~/work/app --reducer anthropic/claude-sonnet-4-5 --format json
+```
+
+Every run except `--help` and `--version` prints one envelope on standard output: [TOON](https://github.com/toon-format/spec) under the root `axi`, or the same object as one JSON line with `--format json`. Every envelope has `verb`, `ok`, `version`, `warnings` and `help` (the next steps), and `error` when `ok` is false. A `setup` envelope adds `outcome` (`written`, `unchanged`, `failed` or `cancelled`), `path` (the file, absolute, or null), `config` (`features`, `reducer`, `cacheRatio`; null on failure) and `context` (`project`, `agentDir`). A usage error has `verb: usage` and `outcome: usage`.
+
+With no verb, `sol-pi-axi` prints the home view: `bin`, `description`, and the state (`absent`, `valid` or `invalid`) of the working directory's `.pi/sol-pi.json` and of the agent directory's `sol-pi.json`.
+
+Exit codes: exit code 0 for `written`, `unchanged` and the home view; 1 for `failed`; 2 for a usage error; 130, 143 and 129 for a run `cancelled` by `SIGINT`, `SIGTERM` or `SIGHUP` (nothing is written). After `written`, start `pi` in the project and trust it, so the extension reads the project file.
 
 For the complete schema, see [Configuration](docs/configuration.md). Coding agents and automated environments should follow the canonical [agent installation and configuration protocol](agents-install.md), which describes an all-enabled configuration checked with `scripts/check-sol-pi-config.mjs --require-all-enabled`.
 

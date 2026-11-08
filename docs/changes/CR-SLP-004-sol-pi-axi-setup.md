@@ -1,6 +1,6 @@
 # CR-SLP-004 — `sol-pi-axi`, an installed AXI command, and its `setup` verb
 
-**Status:** PENDING · Pre-review: ran — touches another project's surface (Model B runs `sol-pi-axi setup`, #1516 items 1–4); 8 points or more
+**Status:** COMPLETED · Pre-review: ran — touches another project's surface (Model B runs `sol-pi-axi setup`, #1516 items 1–4); 8 points or more
 **Type:** feature
 **Priority:** P1 — Model B makes SoL-Pi a prerequisite of every Model B project on Pi
 **Depends on:** CR-SLP-001
@@ -28,7 +28,7 @@ checkout's validation, registers SoL-Pi user-wide with `pi install`, leaves a `.
 - Dynamic version from `sol_pi_axi/_version.py` (`__version__ = "X.Y.Z"`, no imports), equal to
   `package.json` `version`.
 - The wheel holds only `sol_pi_axi/` and metadata; the sdist only `pyproject.toml`, `README.md`,
-  `LICENSE`, `sol_pi_axi/`.
+  `LICENSE`, `sol_pi_axi/`, plus the `PKG-INFO` and `.gitignore` hatchling always adds.
 - Python tests are `tests/test_*.py`; `tests/__init__.py` makes `tests` a package. They import the
   package from an editable install in `.venv` (Python 3.14, `uv pip install -e '.[dev]'`).
 - `.gitignore` adds `.venv/` and `*.egg-info/`.
@@ -47,13 +47,14 @@ checkout's validation, registers SoL-Pi user-wide with `pi install`, leaves a `.
   cancelled run removes a `.pi/` it created. No dependency install, typecheck, test, audit or Pi
   registration.
 - **Paths.** A project path that does not exist or is not a directory, `<project>/.pi` that is not a
-  directory, `sol-pi.json` that is a directory, and an unwritable `.pi/` each fail the run, naming
+  directory, `sol-pi.json` that is a directory, and an unwritable `.pi/` when the run must write each fail the run, naming
   the path. A dangling `sol-pi.json` link is an existing file that cannot be read.
 - **Base values.** A valid project file's effective values; else the agent directory's
   `sol-pi.json`, read the same way; else the setup defaults: all four mechanisms on, ratio 12.5,
   reducer on Pi's default provider and model. The agent file is not read when a project file
   exists. With no value flag, a valid project file is left untouched (`unchanged`).
-- **Pi settings** (read only for the setup defaults): the agent directory's `settings.json`. Missing
+- **Pi settings** (read only when the setup defaults enable the reducer and no `--reducer` is
+  given): the agent directory's `settings.json`. Missing
   means no Pi default; invalid JSON or a non-object root fails the run. `defaultProvider` and
   `defaultModel` count only when both are non-empty strings without whitespace. The reducer enabled
   with no provider or model and no `--reducer` fails the run; the reducer disabled writes the

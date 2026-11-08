@@ -1,0 +1,28 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "sol-pi-axi"
+dynamic = ["version"]
+description = "Agent-facing setup command for the SoL-Pi Pi extensions"
+readme = "README.md"
+requires-python = ">=3.14"
+license = "MIT"
+license-files = ["LICENSE"]
+dependencies = ["toon-format==1.2.0"]
+
+[project.optional-dependencies]
+dev = ["unittest-xml-reporting", "coverage"]
+
+[project.scripts]
+sol-pi-axi = "sol_pi_axi.cli:main"
+
+[tool.hatch.version]
+path = "sol_pi_axi/_version.py"
+
+[tool.hatch.build.targets.wheel]
+packages = ["sol_pi_axi"]
+
+[tool.hatch.build.targets.sdist]
+only-include = ["sol_pi_axi", "pyproject.toml", "README.md", "LICENSE"]

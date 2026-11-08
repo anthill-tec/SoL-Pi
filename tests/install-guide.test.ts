@@ -160,3 +160,111 @@ describe("agent installation instructions", () => {
 		}
 	});
 });
+
+/** A documented envelope key: written as code (`` `key` ``) or as a TOON field (`key:`, `key[2]:`). */
+function documentsKey(text: string, key: string): boolean {
+	return new RegExp(`\`${key}\`|(^|\\s)${key}(\\[\\d+\\])?:`, "mu").test(text);
+}
+
+/** The install lines of a document: every line that runs `pi install` or `uv tool install`. */
+function installLines(text: string): string[] {
+	return text.split(/\r?\n/u).filter((line) => /\b(pi install|uv tool install)\b/u.test(line));
+}
+
+/** The `[Unreleased]` section of the changelog, up to the next release heading. */
+function unreleasedSection(changelog: string): string {
+	const start = changelog.indexOf("## [Unreleased]");
+	if (start < 0) throw new Error("CHANGELOG.md has no [Unreleased] section");
+	const next = changelog.indexOf("\n## [", start + 1);
+	return next < 0 ? changelog.slice(start) : changelog.slice(start, next);
+}
+
+// CR-SLP-004 §S5: the `sol-pi-axi` command, its `setup` verb and its install are documented.
+describe("sol-pi-axi documentation", () => {
+	const SETUP_FLAGS = ["--features", "--reducer", "--cache-ratio", "--format", "--non-interactive"];
+	const ENVELOPE_KEYS = ["verb", "ok", "version", "warnings", "help", "error", "outcome", "path", "config", "context"];
+	const OUTCOMES = ["written", "unchanged", "failed", "cancelled", "usage"];
+
+	for (const name of ["README.md", "agents-install.md"]) {
+		it(`${name} documents sol-pi-axi setup, its flags, envelope, home view and exit codes`, () => {
+			const text = rootFile(name);
+			expect(text).toContain("sol-pi-axi setup");
+			for (const flag of SETUP_FLAGS) expect(text, flag).toContain(flag);
+			for (const key of ENVELOPE_KEYS) expect(documentsKey(text, key), `envelope key ${key}`).toBe(true);
+			for (const outcome of OUTCOMES) expect(text, outcome).toContain(outcome);
+			expect(text).toContain("--format json");
+			expect(text).toMatch(/home view/iu);
+			for (const code of ["130", "143", "129"]) expect(text, `exit ${code}`).toMatch(new RegExp(`\\b${code}\\b`, "u"));
+			expect(text).toMatch(/exit (code|status)/iu);
+		});
+
+		it(`${name} installs sol-pi-axi with uv tool install from anthill-tec/SoL-Pi`, () => {
+			const text = rootFile(name);
+			const version = JSON.parse(rootFile("package.json")).version as string;
+			const escaped = version.replaceAll(".", "\\.");
+			expect(text).toMatch(
+				new RegExp(`uv tool install git\\+https://github\\.com/anthill-tec/SoL-Pi@(<version>|v?${escaped})`, "u"),
+			);
+			for (const line of installLines(text)) {
+				expect(line).not.toContain("NVlabs/SoL-Pi");
+				if (/github\.com/u.test(line)) expect(line).toContain("anthill-tec/SoL-Pi");
+			}
+		});
+	}
+
+	it("README's install lines name anthill-tec/SoL-Pi", () => {
+		const lines = installLines(rootFile("README.md")).filter((line) => /github\.com/u.test(line));
+		expect(lines.length).toBeGreaterThanOrEqual(2);
+		for (const line of lines) expect(line).toContain("anthill-tec/SoL-Pi");
+		expect(rootFile("README.md")).toContain("pi install git:github.com/anthill-tec/SoL-Pi");
+	});
+
+	it("states that the extension reads no environment variables and sol-pi-axi reads PI_CODING_AGENT_DIR", () => {
+		for (const name of ["README.md", "agents-install.md", "docs/configuration.md"]) {
+			const text = rootFile(name);
+			// The old statement covered all of SoL-Pi; the extension alone now reads none.
+			expect(text, name).not.toMatch(/SoL-Pi (reads|uses) no (dedicated )?environment variables/u);
+			expect(text, name).toMatch(/extension[^\n]*\bno\b[^\n]*environment variables/iu);
+			const lines = text.split(/\r?\n/u);
+			expect(
+				lines.some((line) => line.includes("sol-pi-axi") && line.includes("PI_CODING_AGENT_DIR")),
+				`${name}: a statement that sol-pi-axi reads PI_CODING_AGENT_DIR`,
+			).toBe(true);
+		}
+	});
+
+	it("docs/configuration.md and agents-install.md state the layout each part supports", () => {
+		for (const name of ["docs/configuration.md", "agents-install.md"]) {
+			const lines = rootFile(name).split(/\r?\n/u);
+			expect(
+				lines.some((line) => line.includes("sol-pi-axi") && /official (Pi )?layout/iu.test(line)),
+				`${name}: sol-pi-axi supports the official layout only`,
+			).toBe(true);
+			expect(
+				lines.some((line) => /extension[^\n]*follows[^\n]*Pi/iu.test(line) && /agent director/iu.test(line)),
+				`${name}: the extension follows Pi's configuration and agent directories`,
+			).toBe(true);
+			expect(rootFile(name), name).toContain("~/.pi/agent");
+		}
+	});
+
+	it("docs/configuration.md says a project file needs trust and how setup chooses its values", () => {
+		const text = rootFile("docs/configuration.md");
+		expect(text).toMatch(/project[^\n]*\btrust/iu);
+		expect(text).toContain("sol-pi-axi setup");
+		for (const word of ["defaultProvider", "defaultModel", "settings.json", "--reducer"]) {
+			expect(text, word).toContain(word);
+		}
+	});
+
+	it("THIRD_PARTY_NOTICES.md lists toon-format 1.2.0 under MIT", () => {
+		const rows = rootFile("THIRD_PARTY_NOTICES.md").match(/^\| `toon-format` \| [^|]+ \| [^|]+ \|/gmu) ?? [];
+		expect(rows).toEqual(["| `toon-format` | 1.2.0 | MIT |"]);
+	});
+
+	it("CHANGELOG.md [Unreleased] records the sol-pi-axi command", () => {
+		const section = unreleasedSection(rootFile("CHANGELOG.md"));
+		expect(section).toContain("sol-pi-axi");
+		expect(section).toContain("setup");
+	});
+});

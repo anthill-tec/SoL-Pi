@@ -13,6 +13,8 @@ test-reports/
 
 # Build and dependency output.
 node_modules/
+.venv/
+*.egg-info/
 coverage/
 dist/
 *.tgz

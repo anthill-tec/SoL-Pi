@@ -124,11 +124,33 @@ Use one location matching the selected scope. Resolve the directory through Pi; 
 
 SoL-Pi uses Pi's public `CONFIG_DIR_NAME` and `getAgentDir()` APIs. Do not assume the defaults when Pi reports different directories.
 
+The extension follows Pi's configuration and agent directories as Pi reports them; `sol-pi-axi` supports the official Pi layout only (`.pi/` in the project, `$PI_CODING_AGENT_DIR` or `~/.pi/agent` for the agent directory). With another layout, write the file by hand.
+
+### Writing the project file with `sol-pi-axi setup`
+
+For the project-local scope on the official Pi layout, `sol-pi-axi setup` writes the file. Install the command (Python 3.14 or newer and uv; `<version>` is the SoL-Pi release tag of `sol_pi_root`):
+
+```bash
+uv tool install git+https://github.com/anthill-tec/SoL-Pi@<version>
+```
+
+Then, for this all-enabled profile:
+
+```bash
+sol-pi-axi setup /absolute/path/to/target_project --features all --reducer provider-id/model-id --cache-ratio 12.5
+```
+
+`sol-pi-axi setup <project dir>` writes `<project dir>/.pi/sol-pi.json` (creating `.pi/` when missing) and nothing else, and never prompts. Its base values are a valid project file's values, else the agent directory's `sol-pi.json`, else the setup defaults (all four mechanisms on, ratio 12.5, the reducer on Pi's `defaultProvider` and `defaultModel` from the agent directory's `settings.json`); with no value flag a valid project file is left `unchanged`. Flags: `--features` (`all`, `none`, or a comma list of mechanism keys; unlisted ones off), `--reducer <provider>/<model>`, `--cache-ratio <number>`, `--format toon|json` (default `toon`), `--non-interactive` (accepted, no effect), `--help`, `--version`.
+
+Every run except `--help` and `--version` prints one envelope on standard output, TOON under the root `axi`, or one JSON line with `--format json`. Every envelope has `verb`, `ok`, `version`, `warnings` and `help` (the next steps), and `error` when `ok` is false. A `setup` envelope adds `outcome` (`written`, `unchanged`, `failed` or `cancelled`), `path`, `config` (`features`, `reducer`, `cacheRatio`) and `context` (`project`, `agentDir`); a usage error has `verb: usage` and `outcome: usage`. With no verb, `sol-pi-axi` prints the home view: `bin`, `description`, and the state of the working directory's `.pi/sol-pi.json` and the agent directory's `sol-pi.json`.
+
+Exit status: exit code 0 for `written`, `unchanged` and the home view; 1 for `failed`; 2 for a usage error; 130, 143 or 129 for a run `cancelled` by `SIGINT`, `SIGTERM` or `SIGHUP`. Require exit status 0 and `ok: true`, record `path`, and still validate the file with `check-sol-pi-config.mjs` below.
+
 The project file replaces the user-wide file; the two are not merged. If both exist, inspect them and obtain direction before changing either one. Unknown keys, unsupported versions, malformed JSON, non-boolean feature values, invalid reducer model fields, and invalid ratios must remain fatal.
 
 Do not put provider URL, credentials, shell path, command prefix, storage path, or run ID in `sol-pi.json`. SoL-Pi either reads those values from Pi or derives them from the Pi session.
 
-SoL-Pi reads no dedicated environment variables. Evidence-Preserving Reducer uses the configured reducer provider/model route and Pi-managed authentication. Configure credentials in Pi and do not copy them into `sol-pi.json`.
+The extension reads no dedicated environment variables. The `sol-pi-axi` command reads `PI_CODING_AGENT_DIR` to find the agent directory (default `~/.pi/agent`). Evidence-Preserving Reducer uses the configured reducer provider/model route and Pi-managed authentication. Configure credentials in Pi and do not copy them into `sol-pi.json`.
 
 From `sol_pi_root`, validate the exact effective file:
 
