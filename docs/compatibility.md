@@ -63,6 +63,12 @@ A non-zero `then_run` exit is a tool failure on every supported Pi version. The 
 
 If the mutation fails, the command is not run and the call fails with `[then_run:skipped]`.
 
+The fused `edit` and `write` keep Pi's own `promptSnippet` and `promptGuidelines` for each tool and add `then_run` guidance to them: the snippet gains a clause naming `then_run`, and three guidelines per tool follow Pi's, saying when to use `then_run` (a command that finishes: run, build, test, check, install, or restart a service), when to leave it out (the change's result must be read first, or the command keeps running, such as a foreground server or watcher), and that a non-zero exit keeps the change, so the next call fixes forward. Pi adds them to its default system prompt only; a custom system prompt omits the tool list and its rules. With Action Fusion disabled, Pi's own guidance is unchanged.
+
+The `then_run` command runs in the session's working directory (`ctx.cwd`), not the edited file's directory.
+
+A hook that blocks the fused call (for example, one that checks `then_run.command` as a shell call) stops the whole call: neither the change nor the command runs. The change is then repeated without `then_run`, or with a command the hook allows.
+
 ## ObservationPack
 
 ObservationPack changes only the messages projected through the public `context` event. Pi passes `context` handlers a cloned copy of the conversation, so stored session history remains intact. ObservationPack replaces the content of those message objects in place and returns nothing. Since Pi 0.87, a handler that returns different message objects makes Pi merge every mid-conversation system message, such as prompt sections and tool-declaration deltas, into one leading system message, which breaks the provider's cached prefix on every later request. The in-place edit keeps those messages where they are on Pi 1.x and behaves the same on Pi 0.84.2.
