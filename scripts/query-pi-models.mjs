@@ -71,7 +71,7 @@ if (import.meta.main) {
 	if (isInteractive) {
 		console.error("ℹ Use --interactive flag for guided provider/model selection");
 		console.error("ℹ Or pipe output to your own handler:");
-		console.error("ℹ   node scripts/query-pi-models.mjs | jq '.providers[0].id'");
+		console.error("ℹ   bun scripts/query-pi-models.mjs | jq '.providers[0].id'");
 	} else {
 		const result = queryPiModels();
 		console.log(JSON.stringify(result, null, 2));

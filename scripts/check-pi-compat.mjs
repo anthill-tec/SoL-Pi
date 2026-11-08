@@ -7,7 +7,7 @@
  * Check that a Pi installation provides the public APIs SoL-Pi uses at runtime.
  *
  * Usage:
- *   node scripts/check-pi-compat.mjs [--pi-root <dir>] [--strict]
+ *   bun scripts/check-pi-compat.mjs [--pi-root <dir>] [--strict]
  *
  *   --pi-root <dir>  Check the Pi found at <dir> instead of this repo's devDependency. <dir> may be
  *                    the @earendil-works/pi-coding-agent package directory, a project that depends on
@@ -58,7 +58,7 @@ const warnings = [];
 
 function usage(message) {
 	if (message) console.error(`check-pi-compat: ${message}`);
-	console.error("Usage: node scripts/check-pi-compat.mjs [--pi-root <dir>] [--strict]");
+	console.error("Usage: bun scripts/check-pi-compat.mjs [--pi-root <dir>] [--strict]");
 	process.exit(2);
 }
 
@@ -137,7 +137,7 @@ function loadTypeScript() {
 /** Named value imports from Pi packages in src/, keyed by module specifier. */
 function piValueImports() {
 	const ts = loadTypeScript();
-	if (!ts) warnings.push("typescript is not installed; every imported Pi name is checked as a runtime value (run npm ci)");
+	if (!ts) warnings.push("typescript is not installed; every imported Pi name is checked as a runtime value (run bun install)");
 	const imports = new Map();
 	const pattern = /import\s+(?:[\w$]+\s*,\s*)?\{([^}]*)\}\s*from\s*["'](@earendil-works\/[^"']+)["']/g;
 	for (const file of sourceFiles(join(repoRoot, "src"))) {

@@ -32,7 +32,7 @@ Feature keys may be omitted and then default to `false`. `cacheWriteReadRatio` m
 For the managed all-enabled installation described in the [agent installation and configuration protocol](../agents-install.md), validate the effective file before starting Pi:
 
 ```bash
-node scripts/check-sol-pi-config.mjs \
+bun scripts/check-sol-pi-config.mjs \
   --config /absolute/path/to/effective/sol-pi.json \
   --require-all-enabled
 ```

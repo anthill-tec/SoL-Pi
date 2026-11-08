@@ -11,7 +11,7 @@ and Blender for scene reconstruction.
 From the SoL-Pi repository root:
 
 ```bash
-npm ci --ignore-scripts
+bun install --frozen-lockfile --ignore-scripts
 export SOLPI_ROOT="$PWD"
 python3 -m venv "$SOLPI_ROOT/.pi/visual-venv"
 source "$SOLPI_ROOT/.pi/visual-venv/bin/activate"
