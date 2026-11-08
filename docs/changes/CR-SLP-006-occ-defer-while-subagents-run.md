@@ -1,6 +1,6 @@
 # CR-SLP-006 — Online Context Compact defers a boundary compaction while sub-agents run
 
-**Status:** PENDING · Pre-review: ran — touches another project's surface (pi-subagents' published service); reported by Crucible's Mainline, Sandesh message #1531
+**Status:** COMPLETED · Pre-review: ran — touches another project's surface (pi-subagents' published service); reported by Crucible's Mainline, Sandesh message #1531
 **Type:** defect
 **Priority:** P1 — a boundary compaction stops every running background sub-agent of a Model B orchestrator
 **Depends on:** CR-SLP-001
