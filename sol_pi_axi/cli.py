@@ -96,8 +96,8 @@ def main() -> int:
 
 
 def _run(args: list[str]) -> int:
-    fmt = _read_format(args)
     _install_signal_handlers()
+    fmt = _read_format(args)
     try:
         command = _parse(args)
     except UsageError as error:
@@ -237,24 +237,25 @@ def _setup(command: dict) -> tuple[dict, int]:
     envelope: dict = {"verb": "setup", "ok": False, "version": __version__, "outcome": "failed",
                       "path": None, "config": None, "context": context}
     try:
-        agent = config.agent_dir()
-        context["agentDir"] = str(agent)
-        result = setup.run_setup(project, agent_dir=agent, features=command["features"],
-                                 reducer=command["reducer"], cache_ratio=command["cache_ratio"],
-                                 hook=_hold_hook())
-        _disarm()
+        try:
+            _arm()
+            agent = config.agent_dir()
+            context["agentDir"] = str(agent)
+            result = setup.run_setup(project, agent_dir=agent, features=command["features"],
+                                     reducer=command["reducer"],
+                                     cache_ratio=command["cache_ratio"], hook=_hold_hook())
+        finally:
+            _disarm()
     except Cancelled as cancel:
         name = _signal_name(cancel.signum)
         envelope.update(outcome="cancelled", path=_target(project),
                         error=f"cancelled by {name}; nothing was written", warnings=[], help=[])
         return envelope, 128 + cancel.signum
     except config.ConfigError as error:
-        _disarm()
         envelope.update(path=_target(project), error=str(error), warnings=[],
                         help=_fix_help(project, error.flag))
         return envelope, _EXIT_FAILED
     except Exception as error:  # noqa: BLE001 — an unexpected failure is `failed`, named
-        _disarm()
         envelope.update(path=_target(project), error=f"unexpected {type(error).__name__}: {error}",
                         warnings=[], help=_fix_help(project, None))
         return envelope, _EXIT_FAILED
@@ -278,10 +279,14 @@ def _home() -> tuple[dict, int]:
     envelope: dict = {"verb": "home", "ok": True, "version": __version__, "bin": _bin(),
                       "description": _DESCRIPTION}
     try:
-        project_file = config.project_config_path(os.getcwd())
-        agent_file = config.agent_dir() / "sol-pi.json"
-        envelope["project"] = _file_state(project_file)
-        envelope["agentConfig"] = _file_state(agent_file)
+        try:
+            _arm()
+            project_file = config.project_config_path(os.getcwd())
+            agent_file = config.agent_dir() / "sol-pi.json"
+            envelope["project"] = _file_state(project_file)
+            envelope["agentConfig"] = _file_state(agent_file)
+        finally:
+            _disarm()
     except Cancelled as cancel:
         envelope.update(ok=False, error=f"cancelled by {_signal_name(cancel.signum)}",
                         warnings=[], help=[])
@@ -290,7 +295,6 @@ def _home() -> tuple[dict, int]:
         envelope.update(ok=False, error=f"unexpected {type(error).__name__}: {error}",
                         warnings=[], help=["sol-pi-axi setup <project dir>"])
         return envelope, _EXIT_FAILED
-    _disarm()
     envelope.update(warnings=[], help=["sol-pi-axi setup <project dir>"])
     return envelope, 0
 
@@ -395,29 +399,48 @@ def _quote(text: str) -> str:
 
 # --- Signals and the test hold -----------------------------------------------------------------
 
-_ARMED = {"value": False}
+#: The run's signal phase: `before` its work (a signal is kept as `pending`), `armed` during it (a
+#: signal cancels it), `done` after it (the outcome is decided; a signal is ignored, so the one
+#: envelope is printed whole). `Cancelled` is raised only while `armed`, and only inside the verbs'
+#: `except Cancelled`, so it never escapes `main`.
+_SIGNALS: dict = {"phase": "before", "pending": None}
 
 
 def _on_signal(signum, _frame) -> None:
-    """Cancel the run once; a further signal during the clean-up is ignored."""
-    if _ARMED["value"]:
-        _ARMED["value"] = False
+    """Cancel the armed run once; before the work, keep the first signal for `_arm`; after it,
+    or during the clean-up of a cancel, ignore it."""
+    if _SIGNALS["phase"] == "armed":
+        _SIGNALS["phase"] = "done"
         raise Cancelled(signum)
+    if _SIGNALS["phase"] == "before" and _SIGNALS["pending"] is None:
+        _SIGNALS["pending"] = signum
 
 
 def _install_signal_handlers() -> None:
-    """Install this command's own handlers, whatever it inherited (an ignored SIGINT included)."""
+    """Install this command's own handlers, whatever it inherited (an ignored SIGINT included).
+    They stay unarmed until the verb's work starts (`_arm`)."""
     import signal
 
+    _SIGNALS.update(phase="before", pending=None)
     for name in ("SIGINT", "SIGTERM", "SIGHUP"):
         signum = getattr(signal, name, None)
         if signum is not None:
             signal.signal(signum, _on_signal)
-    _ARMED["value"] = True
+
+
+def _arm() -> None:
+    """Start the work: a signal that arrived before it cancels the run now, before anything is
+    read or written; from here a signal cancels it."""
+    pending = _SIGNALS["pending"]
+    if pending is not None:
+        _SIGNALS.update(phase="done", pending=None)
+        raise Cancelled(pending)
+    _SIGNALS["phase"] = "armed"
 
 
 def _disarm() -> None:
-    _ARMED["value"] = False
+    """End the work: the outcome is decided, and a later signal is ignored."""
+    _SIGNALS["phase"] = "done"
 
 
 def _signal_name(signum: int) -> str:

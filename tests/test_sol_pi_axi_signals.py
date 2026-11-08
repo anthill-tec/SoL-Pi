@@ -7,9 +7,12 @@ without `.pi/` still has none; a run started with `SIGINT` ignored is still canc
 The hold is reached through `HOLD_ENV` (see `tests.sol_pi_axi_support`): the run writes the
 temporary file's path and a newline to the named file, then waits until that file is removed."""
 
+import json
 import os
+import shutil
 import signal
 import subprocess
+import sys
 import time
 import unittest
 from pathlib import Path
@@ -27,6 +30,37 @@ from tests.sol_pi_axi_support import (
 
 EXIT_CODES = {signal.SIGINT: 130, signal.SIGTERM: 143, signal.SIGHUP: 129}
 HOLD_TIMEOUT = 30.0
+#: The file the slowed `toon_format` (`SLOW_TOON_FORMAT`) holds its import on.
+IMPORT_HOLD_ENV = "SOL_PI_AXI_TEST_IMPORT_HOLD"
+#: A `toon_format` put first on `PYTHONPATH`: its import writes `held` and a newline to the file
+#: `IMPORT_HOLD_ENV` names, waits until that file is removed, then loads the real `toon_format` in
+#: its place. The command imports `toon_format` only to print a TOON envelope, so the hold stops a
+#: run while its envelope is being printed.
+SLOW_TOON_FORMAT = '''\
+import importlib, os, sys, time
+_shadow = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_hold = os.environ["SOL_PI_AXI_TEST_IMPORT_HOLD"]
+with open(_hold, "w", encoding="utf-8") as _handle:
+    _handle.write("held\\n")
+while os.path.lexists(_hold):
+    time.sleep(0.01)
+sys.path[:] = [entry for entry in sys.path if os.path.abspath(entry or ".") != _shadow]
+del sys.modules[__name__]
+importlib.import_module(__name__)
+'''
+#: Runs `sol-pi-axi <argv[1:]>` in-process with `_parse` wrapped to send the process the signal
+#: `SOL_PI_AXI_TEST_SIGNAL` names first — a signal that lands before the run's work starts.
+SIGNAL_IN_PARSE = '''\
+import os, signal, sys
+from sol_pi_axi import cli
+_parse = cli._parse
+def parse(args):
+    os.kill(os.getpid(), int(os.environ["SOL_PI_AXI_TEST_SIGNAL"]))
+    return _parse(args)
+cli._parse = parse
+sys.argv = ["sol-pi-axi", *sys.argv[1:]]
+sys.exit(cli.main())
+'''
 
 
 class HeldRunTestCase(unittest.TestCase):
@@ -142,6 +176,98 @@ class SignalCancelTest(HeldRunTestCase):
         self.assertFalse(temporary.exists())
         self.assertEqual(self.tree.project_file.read_bytes(), held_bytes)
         self.assertEqual(sorted(os.listdir(self.tree.pi_dir)), ["sol-pi.json"])
+
+
+class SignalOutsideTheWorkTest(unittest.TestCase):
+    """§S4: a signal that lands before the run's work starts, or while its envelope is being
+    printed, never puts a traceback on either stream; a run is cancelled only before anything is
+    written, and an envelope already decided is printed once with its own exit code."""
+
+    def setUp(self):
+        self.tree = TempTree()
+        self.addCleanup(self.tree.cleanup)
+        self.hold = self.tree.root / "import-hold"
+        shadow = self.tree.root / "shadow"
+        (shadow / "toon_format").mkdir(parents=True)
+        (shadow / "toon_format" / "__init__.py").write_text(SLOW_TOON_FORMAT, encoding="utf-8")
+        self.slow_environ = cli_environ(self.tree, PYTHONPATH=str(shadow),
+                                        **{IMPORT_HOLD_ENV: str(self.hold)})
+
+    def signal_while_printing(self, signum, *args) -> subprocess.CompletedProcess:
+        """Run `sol-pi-axi <args>` with the envelope's printing held, send `signum`, release the
+        hold and return the finished run."""
+        self.hold.unlink(missing_ok=True)
+        process = subprocess.Popen([str(venv_script()), *[str(arg) for arg in args]],
+                                   cwd=self.tree.root, env=self.slow_environ,
+                                   stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                                   stderr=subprocess.PIPE, text=True)
+        self.addCleanup(HeldRunTestCase._reap, process)
+        deadline = time.monotonic() + HOLD_TIMEOUT
+        while not (self.hold.exists() and self.hold.read_text(encoding="utf-8").endswith("\n")):
+            if process.poll() is not None:
+                stdout, stderr = process.communicate()
+                self.fail(f"the run ended (exit {process.returncode}) before printing was held\n"
+                          f"stdout:\n{stdout}\nstderr:\n{stderr}")
+            if time.monotonic() > deadline:
+                self.fail(f"printing was not held within {HOLD_TIMEOUT}s ({IMPORT_HOLD_ENV})")
+            time.sleep(0.01)
+        os.kill(process.pid, signum)
+        time.sleep(0.2)  # the handler runs while the import is still held
+        self.hold.unlink()
+        stdout, stderr = process.communicate(timeout=HOLD_TIMEOUT)
+        result = subprocess.CompletedProcess(process.args, process.returncode, stdout, stderr)
+        assert_clean_streams(self, result)
+        return result
+
+    def test_a_signal_while_a_usage_error_is_printed_prints_one_usage_envelope_and_exits_2(self):
+        for signum in EXIT_CODES:
+            with self.subTest(signal=signum.name):
+                result = self.signal_while_printing(signum, "bogusverb")
+                self.assertEqual(result.returncode, 2, f"{result.stdout}\n{result.stderr}")
+                envelope = decode_envelope(self, result.stdout)
+                self.assertEqual((envelope["verb"], envelope["outcome"]), ("usage", "usage"))
+                self.assertIn("bogusverb", envelope["error"])
+
+    def test_a_signal_while_a_written_run_is_printed_reports_written_and_exits_0(self):
+        self.tree.write_settings({"defaultProvider": "anthropic", "defaultModel": "claude-sonnet-4-5"})
+        for signum in EXIT_CODES:
+            with self.subTest(signal=signum.name):
+                shutil.rmtree(self.tree.pi_dir, ignore_errors=True)
+                result = self.signal_while_printing(signum, "setup", self.tree.project)
+                self.assertEqual(result.returncode, 0, f"{result.stdout}\n{result.stderr}")
+                envelope = decode_envelope(self, result.stdout)
+                self.assertEqual((envelope["verb"], envelope["outcome"]), ("setup", "written"))
+                self.assertTrue(self.tree.project_file.is_file())
+
+    def test_a_signal_while_the_home_view_is_printed_prints_it_and_exits_0(self):
+        for signum in EXIT_CODES:
+            with self.subTest(signal=signum.name):
+                result = self.signal_while_printing(signum)
+                self.assertEqual(result.returncode, 0, f"{result.stdout}\n{result.stderr}")
+                self.assertEqual(decode_envelope(self, result.stdout)["verb"], "home")
+
+    def test_a_signal_before_the_work_starts_cancels_the_run_writing_nothing(self):
+        self.tree.write_settings({"defaultProvider": "anthropic", "defaultModel": "claude-sonnet-4-5"})
+        before = snapshot(self.tree.project, self.tree.agent)
+        for signum, code in EXIT_CODES.items():
+            for fmt in ("toon", "json"):
+                with self.subTest(signal=signum.name, format=fmt):
+                    result = subprocess.run(
+                        [sys.executable, "-c", SIGNAL_IN_PARSE, "setup", str(self.tree.project),
+                         "--format", fmt], cwd=self.tree.root,
+                        env=cli_environ(self.tree, SOL_PI_AXI_TEST_SIGNAL=str(int(signum))),
+                        stdin=subprocess.DEVNULL, capture_output=True, text=True,
+                        timeout=60, check=False)
+                    assert_clean_streams(self, result)
+                    self.assertEqual(result.returncode, code, f"{result.stdout}\n{result.stderr}")
+                    if fmt == "json":
+                        self.assertEqual(result.stdout.count("\n"), 1, result.stdout)
+                        envelope = json.loads(result.stdout)["axi"]
+                    else:
+                        envelope = decode_envelope(self, result.stdout)
+                    self.assertEqual((envelope["verb"], envelope["outcome"], envelope["ok"]),
+                                     ("setup", "cancelled", False))
+                    self.assertEqual(snapshot(self.tree.project, self.tree.agent), before)
 
 
 if __name__ == "__main__":
