@@ -93,26 +93,30 @@ outside `setup-sol-pi.fish`, which registers a checkout path. `release.yml` publ
   - `test-bun`: `bun-version: 1.4.4`, `bun test --timeout 30000`;
   - `test-python`: installs the project with its `dev` extra, `oven-sh/setup-bun` at 1.4.4 and
     `bun install --frozen-lockfile`, and sets `PI_BIN` to `node_modules/.bin/pi`, before discovery;
-  - `test-bun` and `test-python`: `actions/setup-node` with `node-version: "22"` before their
-    tests, since Pi needs Node 22.19 or later and the tests start it with `node`.
+  - `test-bun` and `test-python`: `actions/setup-node` at the rendering's own pin with
+    `node-version: "22"` before their tests, since Pi needs Node 22.19 or later and the tests start
+    it with `node`.
 - The header lists the one-time setup: environments `pypi`, `npm` (version tags) and `testpypi`
   (`release/**`, `hotfix/**`); pending trusted publishers for `sol-pi-axi` on pypi.org and
   test.pypi.org; `NPM_TOKEN` for the first npm publish.
 
 ### §S6 — Documentation and changelog
 
-**Surfaces:** `README.md`, `agents-install.md`, `CONTRIBUTING.md`, `CHANGELOG.md`.
+**Surfaces:** `README.md`, `agents-install.md`, `CONTRIBUTING.md`, `CHANGELOG.md`,
+`tests/install-guide.test.ts`.
 
 - README and `agents-install.md`: install with `uv tool install sol-pi-axi==<version>` then
   `sol-pi-axi install`; per project `sol-pi-axi setup <project dir>`; the alternative
   `pi install npm:@anthill-tec/sol-pi@<version>`; the shared version; `install`, `uninstall`,
   `$PI_BIN`, their envelopes, the home view's `extension`. No install from a checkout path.
-- README and `agents-install.md` state that Pi installs an `npm:` source with `npm`, or the command
-  in Pi's `npmCommand` setting (`npm`, `pnpm` or `bun`), so one must be available.
-- README's relative image and link targets become absolute: images
-  `https://raw.githubusercontent.com/anthill-tec/SoL-Pi/main/<path>`, links
-  `https://github.com/anthill-tec/SoL-Pi/blob/main/<path>` (in-page `#` anchors stay), so the
-  PyPI and npm descriptions render.
+- README and `agents-install.md` state that Pi installs an `npm:` source by running `npm`, or the
+  command array in its `npmCommand` setting (for example `["pnpm"]` or `["bun"]`), which must be
+  on `PATH`.
+- README's repository-relative targets become absolute, in Markdown `](…)`, HTML `href=`, `src=`
+  and `srcset=` alike: images `https://raw.githubusercontent.com/anthill-tec/SoL-Pi/main/<path>`,
+  links `https://github.com/anthill-tec/SoL-Pi/blob/main/<path>`; in-page `#` anchors and targets
+  already absolute are unchanged. The two `install-guide.test.ts` assertions that pin relative
+  README links take the absolute forms.
 - `CONTRIBUTING.md`: installing from a checkout for development; the release's publishing and its
   one-time setup; re-rendering `rendered.yml`.
 - `CHANGELOG.md` `[Unreleased]`: the two packages, `install`, `uninstall`.
@@ -164,17 +168,19 @@ arguments and working directory and edits `settings.json` as `pi install` and `p
       `publish-npm` each need `test-bun` and `test-python`; `publish-pypi` and `rehearse` have
       `id-token: write`; guards check `origin/main`; `test-bun` as §S5; `test-python` installs the
       project and the Bun dependencies and sets `PI_BIN` before discovery; `test-bun` and
-      `test-python` each set up Node 22 before their tests; `create-release` checks `pypi:.` and
+      `test-python` each set up Node 22 with `actions/setup-node` at the SHA the rendering pins,
+      before their tests; `create-release` checks `pypi:.` and
       `npm:.`.
 - [ ] **§S5** `release.yml` differs from `rendered.yml` by exactly §S5's hand edits.
 - [ ] **§S6** `tests/install-guide.test.ts` checks §S6's items in README and `agents-install.md`,
       and that neither installs from a checkout path; `CHANGELOG.md` `[Unreleased]` names the two
       packages, `install` and `uninstall`.
-- [ ] **§S6** README has no `src=` or Markdown image target and no link target that is a relative
-      path (in-page `#` anchors excepted); each image is a `raw.githubusercontent.com/anthill-tec/SoL-Pi/main/`
-      URL to a file that exists in the repository.
-- [ ] **§S6** README and `agents-install.md` name `npm`, `pnpm` or `bun` and Pi's `npmCommand`
-      setting as what `pi install npm:…` needs.
+- [ ] **§S6** No Markdown `](…)`, HTML `href=`, `src=` or `srcset=` target in README is a
+      relative path (in-page `#` anchors excepted); each image that was a repository path is a
+      `raw.githubusercontent.com/anthill-tec/SoL-Pi/main/` URL to a file that exists in the
+      repository, and each such link a `github.com/anthill-tec/SoL-Pi/blob/main/` URL to one.
+- [ ] **§S6** README and `agents-install.md` each contain `npmCommand` and `npm` in the statement of
+      what `pi install npm:…` needs.
 - [ ] **Gate** The Bun and the Python `pre-merge-gate` both pass.
 
 ## Estimated size
@@ -187,6 +193,9 @@ arguments and working directory and edits `settings.json` as `pi install` and `p
   precede it.
 - Re-rendering `release.yml` drops the hand edits until Model B fixes CR-MDB-052 items 19 and 21;
   the workflow test catches it.
+- README links point at `main`, which PyPI and npm freeze at upload: a later rename or removal on
+  `main` breaks an older release's page. Accepted: pinning them to the release tag would need
+  README stamped on each release.
 
 ## Non-goals
 
