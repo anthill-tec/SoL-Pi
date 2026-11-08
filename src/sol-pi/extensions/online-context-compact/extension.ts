@@ -9,7 +9,7 @@ import {
 	type ExtensionFactory,
 	type SessionEntry,
 } from "@earendil-works/pi-coding-agent";
-import { formatSavingsCount, showSolPiSavings } from "../../tui.ts";
+import { clearSolPiSavingsTimer, formatSavingsCount, showSolPiSavings } from "../../tui.ts";
 import {
 	DEFAULT_COMPACTION_ECONOMICS,
 	decideCompaction,
@@ -493,7 +493,8 @@ export function createOnlineContextCompactExtension(options: OnlineContextCompac
 			observedMessages = [];
 		});
 
-		pi.on("session_shutdown", () => {
+		pi.on("session_shutdown", (_event, context) => {
+			clearSolPiSavingsTimer(context);
 			releaseContinuation();
 			pendingBoundary = undefined;
 			selected = undefined;

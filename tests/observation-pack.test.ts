@@ -538,7 +538,13 @@ async function runRealSession(mode: SessionMode, body: string) {
 		fauxAssistantMessage(call("emit_output", { large: true }, "big-1"), { stopReason: "toolUse" }),
 		fauxAssistantMessage(fauxText("first done")),
 		fauxAssistantMessage(call("emit_output", { large: false }, "small-1"), { stopReason: "toolUse" }),
-		(context) => {
+		async (context) => {
+			// Pi frees a codemode worker slot only when the worker exits, which on Bun comes after the
+			// script's result: let the two scripts' workers exit before the third script starts.
+			if (viaScript) {
+				await settleWorkerExits();
+				trackWorkerExits();
+			}
 			const big = (context.messages as WireMessage[]).find((message) => message.toolCallId === "big-1");
 			const id = wireText(big).match(/id: (obs_[a-f0-9]{24})/u)?.[1] ?? "missing";
 			return fauxAssistantMessage(call("obs_recall", { id, offset: 0 }, "recall-1"), { stopReason: "toolUse" });

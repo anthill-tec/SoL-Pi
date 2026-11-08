@@ -275,6 +275,68 @@ export function piCliPath(): string {
 	return join(root, bin);
 }
 
+/** `Atomics.waitAsync` (ES2024, newer than the project's `lib`) as far as `realSleep` uses it. */
+type WaitAsync = (
+	typedArray: Int32Array,
+	index: number,
+	value: number,
+	timeout: number,
+) => { async: boolean; value: Promise<string> | string };
+
+/**
+ * Sleeps on real time until `milliseconds` pass or `cell` is notified. Bun's fake timers capture
+ * every timer created while they are installed (even through a `setTimeout` captured earlier) and
+ * freeze its clocks; an `Atomics.waitAsync` timeout is not a timer, so it elapses on real time.
+ */
+async function realSleep(cell: Int32Array, milliseconds: number): Promise<void> {
+	const waitAsync = (Atomics as unknown as { waitAsync: WaitAsync }).waitAsync;
+	const result = waitAsync(cell, 0, 0, milliseconds);
+	if (result.async) await result.value;
+}
+
+export interface WaitForOptions {
+	/** How long to keep calling the callback, in milliseconds (default 1000). */
+	timeout?: number;
+	/** How long to wait between calls, in milliseconds (default 50). */
+	interval?: number;
+}
+
+/**
+ * Vitest's `vi.waitFor` contract: calls `callback` until it returns (or resolves) without
+ * throwing, every `interval` ms for at most `timeout` ms, and resolves to its value; on timeout it
+ * rejects with the callback's last error. It polls on real time even while fake timers are
+ * installed.
+ */
+export async function waitFor<T>(
+	callback: () => T | Promise<T>,
+	options: WaitForOptions = {},
+): Promise<T> {
+	const timeout = options.timeout ?? 1_000;
+	const interval = options.interval ?? 50;
+	// The deadline is a real-time sleep of its own, since the clocks may be faked.
+	const cell = new Int32Array(new SharedArrayBuffer(4));
+	let timedOut = false;
+	const deadline = realSleep(cell, timeout).then(() => {
+		timedOut = true;
+	});
+	try {
+		for (;;) {
+			let lastError: unknown;
+			try {
+				return await callback();
+			} catch (error) {
+				lastError = error;
+			}
+			if (timedOut) throw lastError;
+			await Promise.race([realSleep(cell, interval), deadline]);
+			if (timedOut) throw lastError;
+		}
+	} finally {
+		// Release the deadline and any pending sleep on this call's cell.
+		Atomics.notify(cell, 0);
+	}
+}
+
 const workerExits: Promise<unknown>[] = [];
 let originalTerminate: Worker["terminate"] | undefined;
 
