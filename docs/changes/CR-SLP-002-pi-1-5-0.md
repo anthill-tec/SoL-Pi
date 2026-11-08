@@ -1,6 +1,6 @@
 # CR-SLP-002 — Support Pi 1.5.0; clear the `undici` advisories
 
-**Status:** PENDING · Pre-review: ran — touches another project's surface (Model B's setup step runs the strict Pi compatibility check, message #1516 item 5); re-scoped 2026-11-04 (the setup script's Pi lookup removed: CR-SLP-005 retires the script), re-reviewed after the re-scope (CR-SLP-007 now depends on this CR for its tested-version list)
+**Status:** PENDING · Pre-review: ran — touches another project's surface (Model B's setup step runs the strict Pi compatibility check, #1516 item 5)
 **Type:** maintenance
 **Priority:** P1 — Model B projects on Pi 1.5.0 cannot finish SoL-Pi's setup
 **Depends on:** CR-SLP-001
@@ -35,11 +35,6 @@ Pi 1.4.0 and 1.5.0 change behaviour SoL-Pi meets:
 - **Extension changelogs.** After an update, Pi 1.5.0 shows the `CHANGELOG.md` at an extension
   package's root, matching its version headings against `package.json` `version`.
 - **Codemode** queues scripts for a free worker instead of failing at the worker limit.
-
-The failure Model B reported (#1516 item 5) is in `setup-sol-pi.fish`, which runs the check with
-`--strict` against a Pi it finds by guessing directories. CR-SLP-005 retires that script, and
-CR-SLP-007's `sol-pi-axi install` reads the version of the `pi` that runs and warns when it is
-outside the tested set this CR extends.
 
 ## Scope
 
@@ -116,9 +111,7 @@ outside the tested set this CR extends.
 
 ## Estimated size
 
-3 points. The version bump and docs are mechanical; the indirect internal-package check and the
-reviewed change list add work, and the suite's result on Pi 1.5.0 is the uncertainty. (5 before
-the setup script's Pi lookup was removed.)
+3 points.
 
 ## Risks
 
