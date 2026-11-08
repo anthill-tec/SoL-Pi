@@ -5,7 +5,7 @@
 **Date:** 2026-11-04
 **Status:** ACCEPTED (CR-SLP-004, CR-SLP-005, CR-SLP-007, CR-SLP-008)
 **Sources:** Model B's request (Sandesh #1516) and contract (#1534, corrected #1554, accepted
-#1555); the AXI standard (<https://axi.md>); Pi 1.5.0 (`DefaultPackageManager`, `docs/rpc.md`,
+in #1555); the AXI standard (<https://axi.md>); Pi 1.5.0 (`DefaultPackageManager`, `docs/rpc.md`,
 `docs/rpc-commands.md`); measurements on this machine, 2026-11-04.
 
 ## D1 — Two packages at one version
