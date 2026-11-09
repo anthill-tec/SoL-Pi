@@ -95,15 +95,13 @@ export function registerOnlineTools(pi: ExtensionAPI, handlers: OnlineToolHandle
 		},
 		renderResult(result, { isPartial }, theme) {
 			const boundary = (result.details as { boundary?: boolean } | undefined)?.boundary === true;
+			let status = boundary ? "Progress boundary recorded" : "Plan recorded";
+			if (isPartial) status = "Updating plan...";
 			return renderSolPiTool(
 				theme,
 				"Online Context Compact",
 				"compacts only when projected savings are positive",
-				new Text(
-					theme.fg(isPartial ? "warning" : "dim", isPartial ? "Updating plan..." : boundary ? "Progress boundary recorded" : "Plan recorded"),
-					0,
-					0,
-				),
+				new Text(theme.fg(isPartial ? "warning" : "dim", status), 0, 0),
 			);
 		},
 	});

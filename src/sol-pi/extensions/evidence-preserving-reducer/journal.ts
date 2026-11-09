@@ -11,7 +11,7 @@ import { REDUCER_EVENT_SCHEMA, REDUCER_EVENT_TYPE, type ReducerConfig } from "./
  * The entries never enter the LLM context. They record which results were
  * candidates, which were delegated, and why each fallback happened.
  */
-export type Journal = (kind: string, data?: object) => void;
+export type Journal = (kind: string, data?: Readonly<Record<string, unknown>>) => void;
 
 export function createJournal(pi: ExtensionAPI, config: ReducerConfig): Journal {
 	return (kind, data = {}) => {

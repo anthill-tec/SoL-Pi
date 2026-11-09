@@ -13,6 +13,9 @@ type ProjectionApi = {
 
 /** Pi 1.0 applies context edits before choosing a cut; older Pi uses raw messages. */
 function contextEntries(entries: readonly SessionEntry[]): readonly ProjectedEntry[] {
+	// SAFETY: the Pi resolved at runtime may predate `buildSessionProjection`, even
+	// though the installed type declares it. ProjectionApi marks it optional so the
+	// presence check below is honoured; older Pi takes the raw-message fallback.
 	const buildProjection = (pi as unknown as ProjectionApi).buildSessionProjection;
 	if (buildProjection) return buildProjection([...entries]).entries;
 	const lastCompaction = entries.findLastIndex((entry) => entry.type === "compaction");
@@ -66,9 +69,11 @@ export function projectedEntryTokens(
 		// Dropped, rewritten, newly appended, or ambiguously duplicated messages
 		// provide no proven savings. Never fall back to their raw content size.
 		if (!sizes || sizes.length !== ids.length || (key.startsWith("tool:") && ids.length > 1)) continue;
-		for (let index = 0; index < ids.length; index++) {
-			const id = ids[index]!;
-			tokens.set(id, (tokens.get(id) ?? 0) + sizes[index]!);
+		for (const [index, id] of ids.entries()) {
+			// The length check above guarantees a size for every id.
+			const size = sizes[index];
+			if (size === undefined) continue;
+			tokens.set(id, (tokens.get(id) ?? 0) + size);
 		}
 	}
 	return tokens;
@@ -123,9 +128,10 @@ export function estimateProjectedCompactionTokens(
 		? sizes.get(entry.sourceEntry.id) ?? 0
 		: removable(entry).reduce((sum, message) => sum + estimateTokens(message), 0)), 0);
 	const previousEntry = projected[previous];
-	const previousTokens = previousEntry ? (sizes
+	if (!previousEntry) return prefixTokens;
+	const previousTokens = sizes
 		? sizes.get(previousEntry.sourceEntry.id) ?? 0
 		: previousEntry.messages.filter((message) => message.role === "compactionSummary")
-			.reduce((sum, message) => sum + estimateTokens(message), 0)) : 0;
+			.reduce((sum, message) => sum + estimateTokens(message), 0);
 	return prefixTokens + previousTokens;
 }

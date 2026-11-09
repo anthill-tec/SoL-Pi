@@ -81,7 +81,9 @@ async function exactBodyFromInline(inline: string, details: unknown): Promise<st
 }
 
 function firstIndex(left: number, right: number): number {
-	return left < 0 ? right : right < 0 ? left : Math.min(left, right);
+	if (left < 0) return right;
+	if (right < 0) return left;
+	return Math.min(left, right);
 }
 
 /**

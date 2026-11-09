@@ -110,6 +110,16 @@ function showsSavingsBanner(thenRun: unknown, context: { readonly isError?: bool
 	return Boolean(thenRun) && !context.isError;
 }
 
+/**
+ * Narrow a built-in renderer the fused tool inherits. Pi's built-in `edit` and
+ * `write` definitions always carry both renderers; the tool type marks them
+ * optional, so a missing one is a broken Pi install and fails loudly.
+ */
+function inheritedRenderer<T>(renderer: T | undefined, tool: string, kind: string): T {
+	if (renderer === undefined) throw new Error(`Pi's built-in ${tool} tool has no ${kind} to inherit`);
+	return renderer;
+}
+
 export function createActionFusionExtension(options: ActionFusionOptions = {}): ExtensionFactory {
 	const baseEdit = memoizeByCwd((cwd: string) => createEditToolDefinition(cwd, options.editOptions));
 	const baseWrite = memoizeByCwd((cwd: string) => createWriteToolDefinition(cwd, options.writeOptions));
@@ -146,13 +156,15 @@ export function createActionFusionExtension(options: ActionFusionOptions = {}): 
 				return result;
 			},
 			renderCall: (args, theme, context) => {
-				const base = baseEdit(context.cwd).renderCall!(args, theme, context);
+				const renderCall = inheritedRenderer(baseEdit(context.cwd).renderCall, "edit", "renderCall");
+				const base = renderCall(args, theme, context);
 				return showsSavingsBanner(args.then_run, context)
 					? renderSolPiTool(theme, "Action Fusion", "1 model round-trip avoided", base)
 					: base;
 			},
 			renderResult: (result, resultOptions, theme, context) => {
-				const base = baseEdit(context.cwd).renderResult!(result, resultOptions, theme, context);
+				const renderResult = inheritedRenderer(baseEdit(context.cwd).renderResult, "edit", "renderResult");
+				const base = renderResult(result, resultOptions, theme, context);
 				return showsSavingsBanner(context.args.then_run, context)
 					? renderSolPiTool(theme, "Action Fusion", "1 model round-trip avoided", base)
 					: base;
@@ -178,13 +190,15 @@ export function createActionFusionExtension(options: ActionFusionOptions = {}): 
 				return result;
 			},
 			renderCall: (args, theme, context) => {
-				const base = baseWrite(context.cwd).renderCall!(args, theme, context);
+				const renderCall = inheritedRenderer(baseWrite(context.cwd).renderCall, "write", "renderCall");
+				const base = renderCall(args, theme, context);
 				return showsSavingsBanner(args.then_run, context)
 					? renderSolPiTool(theme, "Action Fusion", "1 model round-trip avoided", base)
 					: base;
 			},
 			renderResult: (result, resultOptions, theme, context) => {
-				const base = baseWrite(context.cwd).renderResult!(result, resultOptions, theme, context);
+				const renderResult = inheritedRenderer(baseWrite(context.cwd).renderResult, "write", "renderResult");
+				const base = renderResult(result, resultOptions, theme, context);
 				return showsSavingsBanner(context.args.then_run, context)
 					? renderSolPiTool(theme, "Action Fusion", "1 model round-trip avoided", base)
 					: base;
