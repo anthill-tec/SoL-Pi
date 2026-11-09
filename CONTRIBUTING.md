@@ -13,11 +13,12 @@ Your PR should:
 
 ## Installing from a Checkout for Development
 
-Users install SoL-Pi from the registries (see the README). To work on SoL-Pi itself, install from a checkout instead. From the checkout, install the locked dependencies and run the checks:
+Users install SoL-Pi from the registries (see the README). To work on SoL-Pi itself, install from a checkout instead. From the checkout, install the locked dependencies and validate the checkout: `bun run check` runs the typecheck and the tests, and `bun audit --audit-level=high` checks the locked dependencies for high and critical advisories:
 
 ```bash
 bun install --frozen-lockfile --ignore-scripts
 bun run check
+bun audit --audit-level=high
 ```
 
 Then register the checkout with Pi, user-wide or, from a trusted project, project-locally:

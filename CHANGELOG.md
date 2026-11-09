@@ -12,7 +12,8 @@ All notable changes to this project are documented in this file. The format is b
   sol-pi-axi==<version>`). `sol-pi-axi setup <project dir>` writes
   `<project dir>/.pi/sol-pi.json` from the project file, the agent directory's `sol-pi.json` or the
   setup defaults (all four mechanisms on, ratio 12.5, the reducer on Pi's default provider and
-  model), overridden by `--features`, `--reducer` and `--cache-ratio`; it never prompts, writes
+  model), overridden by `--features`, `--reducer` and `--cache-ratio`; it prompts only with
+  `--interactive`, writes
   atomically, and a signal cancels it leaving nothing behind. Every run prints one TOON envelope
   (or one JSON line with `--format json`) with documented exit codes; with no verb it prints a
   home view. It reads `PI_CODING_AGENT_DIR`.
@@ -44,6 +45,17 @@ All notable changes to this project are documented in this file. The format is b
   (use it for a command that finishes, leave it out when the result must be read first or the
   command keeps running, and fix forward after a non-zero exit). The `then_run` descriptions'
   examples now read "run, build, test, check, install, or restart a service".
+- `--interactive` for `sol-pi-axi setup` and `sol-pi-axi install`: the run prompts on standard
+  error for each mechanism, the reducer's `<provider>/<model>` (suggesting the usable
+  `enabledModels` entries of Pi's `settings.json`) and the cache ratio, defaulting to the values
+  it would use without `--interactive`, then asks for confirmation; `install` prompts only when it
+  will create the agent directory's `sol-pi.json`. It prompts only when standard input and
+  standard error are terminals, the process group is the terminal's foreground group and
+  `PI_NONINTERACTIVE` is unset or empty; otherwise it warns and runs as without
+  `--interactive`. A cancel before the confirmation exits 130 (declined, Ctrl+C, Ctrl+D,
+  `SIGINT`), 143 (`SIGTERM`) or 129 (`SIGHUP`), in addition to AXI's 0, 1 and 2, and writes and
+  registers nothing. `--interactive` with `--non-interactive`, with no verb, or on `uninstall` or
+  `verify` is a usage error.
 
 ### Security
 
@@ -56,13 +68,23 @@ All notable changes to this project are documented in this file. The format is b
 
 - The project's tooling moved to Bun 1.4.4: Bun is the package manager (`bun.lock` replaces
   `package-lock.json`), the script runner and the test runner (`bun test --timeout 30000`). The
-  documentation, `setup-sol-pi.fish`, the `sol-pi-skill` example and the release workflow use the
+  documentation, the `sol-pi-skill` example and the release workflow use the
   Bun commands, and Bun 1.4.4 is a prerequisite. Pi can be installed with Bun
   (`bun add --global`) or, as before, with npm.
 
 ### Removed
 
 - Vitest: the tests run on Bun's own test runner (`bun:test`).
+- The fish setup script `setup-sol-pi.fish` is removed, with its helpers
+  `setup-sol-pi-interactive.mjs` and `scripts/query-pi-models.mjs`; `sol-pi-axi` replaces it:
+  - user-wide setup: `sol-pi-axi install`;
+  - project setup: `sol-pi-axi setup <dir>`;
+  - prompts: `--interactive`;
+  - `--uninstall`: `sol-pi-axi uninstall`, without the `.bak` restore;
+  - strict Pi compatibility failure: a warning in `sol-pi-axi install`;
+  - smoke test: the post-install check (`sol-pi-axi verify`);
+  - registering the checkout: the npm source; checkout development is in `CONTRIBUTING.md`;
+  - checkout validation, audit, all-mechanisms test: `bun run check`, `bun audit`.
 
 ### Fixed
 

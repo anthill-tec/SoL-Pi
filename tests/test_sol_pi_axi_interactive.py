@@ -907,7 +907,7 @@ class InteractiveUsageTest(PiCommandTestCase):
         result = self.sol("--help")
         self.assert_exit(result, 0)
         self.assertRegex(result.stdout, r"(?m)^\s+--interactive\b", "a flag line for it")
-        self.assertNotRegex(" ".join(result.stdout.split()), r"(?i)never prompts")
+        self.assertNotRegex(" ".join(result.stdout.split()), r"(?i)never\s+prompts")
 
     def test_the_yes_hint_names_interactive_and_non_interactive(self):
         result = self.sol("setup", self.tree.project, "--yes")
@@ -916,13 +916,13 @@ class InteractiveUsageTest(PiCommandTestCase):
         hint = " ".join([envelope["error"].split("; valid verbs")[0], *envelope["help"]])
         self.assertRegex(hint, r"(?<![\w-])--interactive\b")
         self.assertIn("--non-interactive", hint)
-        self.assertNotRegex(" ".join(hint.split()), r"(?i)never prompts")
+        self.assertNotRegex(" ".join(hint.split()), r"(?i)never\s+prompts")
 
     def test_no_source_of_the_command_says_it_never_prompts(self):
         for path in sorted((REPO / "sol_pi_axi").glob("*.py")):
             with self.subTest(path=path.name):
                 text = " ".join(path.read_text(encoding="utf-8").split())
-                self.assertNotRegex(re.sub(r'"\s*"', "", text), r"(?i)never prompts")
+                self.assertNotRegex(re.sub(r'"\s*"', "", text), r"(?i)never\s+prompts")
 
 
 if __name__ == "__main__":
