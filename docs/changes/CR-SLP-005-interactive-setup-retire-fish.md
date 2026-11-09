@@ -21,8 +21,8 @@ through `tests/fixtures/drive-pty.py`, and is replaced by `sol-pi-axi` (DN §D7)
 
 **Surfaces:** `sol_pi_axi/` (a prompt module; `setup` and `install`), help text, valid-flag lists.
 
-- `--interactive` is a flag of `setup` and `install`; with `--non-interactive`, on the home view, or
-  on `uninstall` it is a usage error.
+- `--interactive` is a flag of `setup` and `install`; with `--non-interactive`, on the home view, on
+  `uninstall` or on `verify` it is a usage error.
 - It prompts when standard input and standard error are terminals and `PI_NONINTERACTIVE` is unset
   or empty; otherwise it adds a warning saying why and runs as without `--interactive`.
 - `setup` prompts for the project file's values; `install` only when it will create the agent
@@ -42,11 +42,16 @@ through `tests/fixtures/drive-pty.py`, and is replaced by `sol-pi-axi` (DN §D7)
 - Before the confirmation is answered: declining it, Ctrl+C, Ctrl+D on an empty line, and `SIGINT`
   exit 130; `SIGTERM` 143; a closed terminal 129, whether `SIGHUP` or an `OSError` on the terminal.
   Nothing is written or registered and no temporary file is left.
-- After the confirmation, signals follow CR-SLP-004 §S2 and CR-SLP-007 §S2; `install`'s
-  `cancelled` envelope reports the registration in `extension`.
-- `cancelled` envelope: `ok: false`, `outcome: cancelled`, `error` naming the cause, `path` (for
-  `install`, `config.path`), `config` (values shown so far, `null` before the first answer),
-  `help[]` with the command to run again.
+- After the confirmation, signals follow CR-SLP-004 §S2, CR-SLP-007 §S2 and CR-SLP-008 §S4;
+  `install`'s `cancelled` envelope reports the registration in `extension`, and `install` runs
+  its load check last as without `--interactive`.
+- `cancelled` envelope before the confirmation: `ok: false`, `outcome: cancelled`, `error` naming
+  the cause, `help[]` with the command to run again.
+  - `setup`: `path` the target file, `config` the values shown so far (`null` before the first
+    answer).
+  - `install`: `config` in CR-SLP-007's shape with `path` the target file, `state` `null`, and
+    `features`, `reducer`, `cacheRatio` the values shown so far (each `null` before the first
+    answer); `extension` reports nothing registered; `verify` `null`.
 
 ### §S2 — The fish setup script removed
 
@@ -61,9 +66,12 @@ through `tests/fixtures/drive-pty.py`, and is replaced by `sol-pi-axi` (DN §D7)
 **Surfaces:** `README.md`, `agents-install.md`, `CONTRIBUTING.md`, `CHANGELOG.md`.
 
 - README and `agents-install.md`: `--interactive`, when it prompts, `PI_NONINTERACTIVE`, the cancel
-  exit codes as an addition to AXI's.
+  exit codes as an addition to AXI's; their statements that `setup` never prompts say it prompts
+  only with `--interactive`.
 - `CONTRIBUTING.md`: validating a checkout with `bun run check` and `bun audit --audit-level=high`.
-- `CHANGELOG.md` `[Unreleased]`: `--interactive`, and the script's removal with DN §D7's mapping.
+- `CHANGELOG.md` `[Unreleased]`: `--interactive`, and the script's removal with DN §D7's mapping;
+  the earlier `[Unreleased]` entries that name `setup-sol-pi.fish` drop it, since 0.1.0 never
+  ships the script.
 
 ## Acceptance criteria
 
@@ -78,8 +86,10 @@ CR-SLP-007's stub `pi`.
 - [ ] **§S1** `PI_NONINTERACTIVE=1`, standard input not a terminal, or standard error not a terminal:
       no prompt, a warning naming why, the same outcome and exit as without `--interactive`.
       `PI_NONINTERACTIVE=` prompts.
-- [ ] **§S1** `--interactive --non-interactive`, `--interactive` on the home view and on `uninstall`:
-      exit 2. `--help` names `--interactive`.
+- [ ] **§S1** `--interactive --non-interactive`, and `--interactive` on the home view, `uninstall`
+      and `verify`: exit 2. `--help` names `--interactive`.
+- [ ] **§S1** `install --interactive`, confirmed: the run ends with the load check (`verify` not
+      `null`), as without `--interactive`.
 - [ ] **§S1** Value flags become the prompts' defaults.
 - [ ] **§S1** No Pi default: the reducer prompt has no default; a typed `<provider>/<model>` is
       written; an empty answer exits 1, `failed`, `--reducer` in `help[]`, no `pi` command run.
@@ -91,8 +101,9 @@ CR-SLP-007's stub `pi`.
       yes or no repeat their prompt; reducer "no" skips the reducer prompt.
 - [ ] **§S1** Confirming the base values: `unchanged`, nothing written.
 - [ ] **§S1** At a prompt: declining, Ctrl+C, Ctrl+D on an empty line, `SIGINT` exit 130; `SIGTERM`
-      143; `SIGHUP` 129; each prints `cancelled` with §S1's keys, writes and registers nothing,
-      leaves no temporary file.
+      143; `SIGHUP` 129; each prints `cancelled` with §S1's keys for its verb (for `install`,
+      `config.state` `null` and `verify` `null`), writes and registers nothing, leaves no temporary
+      file.
 - [ ] **§S1** Closing the pseudo-terminal master, the command not its session's leader: exit 129,
       `cancelled` on the pipe.
 - [ ] **§S1** Started with `SIGINT` ignored, Ctrl+C exits 130.
@@ -103,7 +114,8 @@ CR-SLP-007's stub `pi`.
 - [ ] **§S2** The Bun suite's passed-plus-skipped count falls by exactly 6, the cases of
       `tests/setup-prompt-flow.test.ts`; no other test changes name or status.
 - [ ] **§S3** `tests/install-guide.test.ts` checks §S3's items in README, `agents-install.md` and
-      `CONTRIBUTING.md`; `CHANGELOG.md` `[Unreleased]` has DN §D7's mapping.
+      `CONTRIBUTING.md`, and that neither README nor `agents-install.md` says `setup` never prompts;
+      `CHANGELOG.md` `[Unreleased]` has DN §D7's mapping and names `setup-sol-pi.fish` only in it.
 - [ ] **Gate** The Bun and the Python `pre-merge-gate` both pass.
 
 ## Estimated size
