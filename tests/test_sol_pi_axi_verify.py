@@ -68,6 +68,17 @@ cli._parse = parse
 sys.argv = ["sol-pi-axi", *sys.argv[1:]]
 sys.exit(cli.main())
 '''
+#: Runs `sol-pi-axi <argv[1:]>` in-process with `sol_pi_axi.check.run_check` raising an unexpected
+#: error.
+CHECK_RAISES = '''\
+import sys
+from sol_pi_axi import check, cli
+def run_check(*args, **kwargs):
+    raise RuntimeError("the check broke")
+check.run_check = run_check
+sys.argv = ["sol-pi-axi", *sys.argv[1:]]
+sys.exit(cli.main())
+'''
 RPC_ARGV = ["--offline", "--no-approve", "--mode", "rpc", "--no-session"]
 GET_STATE = {"id": "sol-pi-axi", "type": "get_state"}
 INSTALL = "sol-pi-axi install"
@@ -517,6 +528,47 @@ class SignalWhilePiRunsTest(VerifyTestCase):
                 self.assertIsNone(envelope["verify"])
                 self.assertEqual(envelope["extension"]["registered"], True)
                 self.assertEqual(self.packages(), [self.own_source()])
+
+
+class UnexpectedCheckErrorTest(VerifyTestCase):
+    """An unexpected error in the check is a named `failed` envelope, as in the other verbs: never
+    only `main`'s last-guard line on standard error."""
+
+    def run_raising(self, verb: str):
+        result = subprocess.run(
+            [sys.executable, "-c", CHECK_RAISES, verb], cwd=self.tree.project,
+            env=self.environ(), stdin=subprocess.DEVNULL, capture_output=True, text=True,
+            timeout=60, check=False)
+        assert_clean_streams(self, result)
+        self.assert_exit(result, 1)
+        return decode_envelope(self, result.stdout)
+
+    def test_verify_reports_a_failed_envelope_with_its_verify_key(self):
+        self.register_npm()
+        envelope = self.run_raising("verify")
+        self.assertEqual((envelope["verb"], envelope["ok"], envelope["outcome"]),
+                         ("verify", False, "failed"))
+        self.assertEqual(envelope["verify"], {"ok": False, "loaded": False, "exit": None,
+                                              "errors": []})
+        self.assertEqual(envelope["error"], "unexpected RuntimeError: the check broke")
+        self.assertEqual(envelope["extension"], {"state": "registered", "source": self.own_source()})
+        self.assertEqual(envelope["context"], {"agentDir": str(self.tree.agent)})
+        self.assertEqual(envelope["help"], [INSTALL, UNINSTALL])
+
+    def test_install_reports_a_failed_envelope_keeping_registration_and_configuration(self):
+        self.with_pi_default()
+        envelope = self.run_raising("install")
+        self.assertEqual((envelope["verb"], envelope["ok"], envelope["outcome"]),
+                         ("install", False, "failed"))
+        self.assertEqual(envelope["verify"], {"ok": False, "loaded": False, "exit": None,
+                                              "errors": []})
+        self.assertEqual(envelope["error"], "unexpected RuntimeError: the check broke")
+        self.assertEqual(envelope["extension"]["source"], self.own_source())
+        self.assertEqual(envelope["extension"]["registered"], True)
+        self.assertEqual(envelope["config"]["state"], "written")
+        self.assertEqual(self.packages(), [self.own_source()], "the registration was removed")
+        self.assertTrue(self.tree.agent_file.is_file(), "the configuration was removed")
+        self.assertEqual(envelope["help"], [INSTALL, UNINSTALL])
 
 
 # --- install runs the check (stub) --------------------------------------------------------------

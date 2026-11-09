@@ -385,8 +385,9 @@ def _install(command: dict) -> tuple[dict, int]:
 def _install_check(report) -> tuple[dict | None, int, str | None, list[str]]:
     """Run the check after a registering install run: its `verify` key (None when cancelled),
     the exit code, and the error and help on failure. A failed check fails the run and leaves
-    the registration and the configuration as the run left them."""
-    from .check import run_check
+    the registration and the configuration as the run left them; an unexpected error is a failed
+    check, named."""
+    from .check import CheckResult, run_check
 
     try:
         try:
@@ -397,6 +398,10 @@ def _install_check(report) -> tuple[dict | None, int, str | None, list[str]]:
     except Cancelled as cancel:
         report.outcome = "cancelled"
         return None, 128 + cancel.signum, f"cancelled by {_signal_name(cancel.signum)}", []
+    except Exception as error:  # noqa: BLE001 — an unexpected failure is `failed`, named
+        report.outcome = "failed"
+        return (CheckResult().verify(), _EXIT_FAILED, f"unexpected {type(error).__name__}: {error}",
+                ["sol-pi-axi install", "sol-pi-axi uninstall"])
     report.warnings.extend(result.warnings)
     if result.ok:
         return result.verify(), 0, None, []
@@ -423,6 +428,11 @@ def _verify() -> tuple[dict, int]:
                         extension={"state": "absent"},
                         error=f"cancelled by {_signal_name(cancel.signum)}", warnings=[], help=[])
         return envelope, 128 + cancel.signum
+    except Exception as error:  # noqa: BLE001 — an unexpected failure is `failed`, named
+        envelope.update(verify=result.verify(), extension=_extension_state(agent)[0],
+                        error=f"unexpected {type(error).__name__}: {error}", warnings=[],
+                        help=["sol-pi-axi install", "sol-pi-axi uninstall"])
+        return envelope, _EXIT_FAILED
     extension = ({"state": "absent"} if result.source is None else
                  {"state": "registered", "source": result.source})
     envelope.update(ok=result.ok, outcome="verified" if result.ok else "failed",
