@@ -1,6 +1,6 @@
 # CR-SLP-008 — `sol-pi-axi verify`, and `install`'s check that Pi loads SoL-Pi
 
-**Status:** PENDING · Pre-review: ran — touches another project's surface (Model B's install remediation, #1554; its `sol-pi-status` skill runs `verify`, #1558)
+**Status:** COMPLETED · Pre-review: ran — touches another project's surface (Model B's install remediation, #1554; its `sol-pi-status` skill runs `verify`, #1558)
 **Type:** feature
 **Priority:** P1 — replaces the fish setup script's smoke test, which CR-SLP-005 removes
 **Depends on:** CR-SLP-007
