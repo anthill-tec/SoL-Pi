@@ -425,7 +425,7 @@ def _verify() -> tuple[dict, int]:
             _disarm()
     except Cancelled as cancel:
         envelope.update(outcome="cancelled", verify=result.verify(),
-                        extension={"state": "absent"},
+                        extension=_extension_state(agent)[0],
                         error=f"cancelled by {_signal_name(cancel.signum)}", warnings=[], help=[])
         return envelope, 128 + cancel.signum
     except Exception as error:  # noqa: BLE001 — an unexpected failure is `failed`, named

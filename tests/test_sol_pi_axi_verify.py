@@ -466,7 +466,21 @@ class VerifyUsageTest(VerifyTestCase):
                 envelope = decode_envelope(self, result.stdout)
                 self.assertEqual((envelope["verb"], envelope["ok"], envelope["outcome"]),
                                  ("verify", False, "cancelled"))
+                self.assertEqual(envelope["extension"],
+                                 {"state": "registered", "source": self.own_source()})
                 self.assertEqual(self.pi.rpc_calls(), [])
+
+    def test_a_cancelled_verify_with_nothing_registered_reports_absent(self):
+        self.with_pi_default(["npm:pi-unrelated@1.0.0"])
+        result = subprocess.run(
+            [sys.executable, "-c", SIGNAL_IN_PARSE, "verify"], cwd=self.tree.project,
+            env=self.environ(SOL_PI_AXI_TEST_SIGNAL=str(int(signal.SIGTERM))),
+            stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=60, check=False)
+        assert_clean_streams(self, result)
+        self.assert_exit(result, 143)
+        envelope = decode_envelope(self, result.stdout)
+        self.assertEqual(envelope["outcome"], "cancelled")
+        self.assertEqual(envelope["extension"], {"state": "absent"})
 
 
 class SignalWhilePiRunsTest(VerifyTestCase):
@@ -512,6 +526,8 @@ class SignalWhilePiRunsTest(VerifyTestCase):
                 self.assertEqual(envelope["error"], f"cancelled by {signum.name}")
                 self.assertEqual(envelope["verify"], {"ok": False, "loaded": False, "exit": None,
                                                       "errors": []})
+                self.assertEqual(envelope["extension"],
+                                 {"state": "registered", "source": self.own_source()})
 
     def test_each_signal_during_installs_check_cancels_it_and_leaves_no_pi_process(self):
         self.with_pi_default()
