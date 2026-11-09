@@ -26,3 +26,14 @@ packages = ["sol_pi_axi"]
 
 [tool.hatch.build.targets.sdist]
 only-include = ["sol_pi_axi", "pyproject.toml", "README.md", "LICENSE"]
+
+# Pyright resolves third-party imports (toon_format) from the project's .venv and the
+# project's own modules (sol_pi_axi._version) from the repository root, whichever
+# directory it is started in. It checks the package and its tests; examples/ carries
+# its own runtime dependencies (Pillow), which the .venv does not install.
+[tool.pyright]
+venvPath = "."
+venv = ".venv"
+pythonVersion = "3.14"
+include = ["sol_pi_axi", "tests"]
+exclude = ["**/node_modules", "**/__pycache__", ".venv", ".worktrees", "test-reports", "examples"]
