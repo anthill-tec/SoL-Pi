@@ -212,6 +212,27 @@ def _docstring_nodes(tree: ast.AST) -> set[int]:
     return ids
 
 
+#: The one exemption (CR-SLP-008, Mainline-approved): `sol_pi_axi/check.py`'s
+#: `PI_NPM_INSTALL_ROOT`, the data path where Pi's own npm install puts packages, holding exactly
+#: these components.
+_PI_NPM_INSTALL_ROOT = ("npm", "node_modules")
+
+
+def _pi_npm_install_root_nodes(tree: ast.AST) -> set[int]:
+    """The ids of the string constants of a module-level `PI_NPM_INSTALL_ROOT = ("npm",
+    "node_modules")` assignment; empty when it is absent or holds anything else."""
+    for node in getattr(tree, "body", []):
+        if isinstance(node, ast.Assign) and len(node.targets) == 1 \
+                and isinstance(node.targets[0], ast.Name) \
+                and node.targets[0].id == "PI_NPM_INSTALL_ROOT" \
+                and isinstance(node.value, ast.Tuple):
+            items = [item for item in node.value.elts if isinstance(item, ast.Constant)]
+            if len(items) == len(node.value.elts) \
+                    and tuple(item.value for item in items) == _PI_NPM_INSTALL_ROOT:
+                return {id(item) for item in items}
+    return set()
+
+
 class NoNodeOrPiCodeTest(unittest.TestCase):
     """No `sol_pi_axi` module starts `bun` or `node` or imports Node or Pi code."""
 
@@ -241,9 +262,11 @@ class NoNodeOrPiCodeTest(unittest.TestCase):
         for path in self._modules():
             tree = ast.parse(path.read_text(encoding="utf-8"))
             docstrings = _docstring_nodes(tree)
+            allowed = (_pi_npm_install_root_nodes(tree)
+                       if path == PACKAGE_DIR / "check.py" else set())
             for node in ast.walk(tree):
                 if not isinstance(node, ast.Constant) or not isinstance(node.value, str) \
-                        or id(node) in docstrings:
+                        or id(node) in docstrings or id(node) in allowed:
                     continue
                 words = node.value.split()
                 command = os.path.basename(words[0]) if words else ""

@@ -109,6 +109,10 @@ The `pi list` output must show the exact SoL-Pi source. Do not register SoL-Pi f
 
 `sol-pi-axi uninstall` removes every SoL-Pi source Pi has registered with `pi remove`, and deletes no configuration file (`warnings` names the agent directory's `sol-pi.json` when it exists). Its envelope adds `outcome` (`removed`, `unchanged`, `failed` or `cancelled`), `removed` (the sources removed) and `context` (`agentDir`).
 
+`sol-pi-axi install` ends, once the source is registered (`installed` or `unchanged`), by running the check that `sol-pi-axi verify` runs, proving Pi loads SoL-Pi; a failed check fails the run (exit 1, `failed`) and removes or rewrites nothing, reporting the registration and configuration as the run left them. Its envelope adds `verify` (below), `null` when the run ended before the check. A cancel during the check also gives `verify: null`.
+
+`sol-pi-axi verify` runs that check alone; it registers nothing and writes no SoL-Pi file. It first requires exactly one SoL-Pi source in Pi's `settings.json`, an `npm:@anthill-tec/sol-pi` source or a local path, with its package on disk; then it starts `pi --offline --no-approve --mode rpc --no-session` from the home directory with `SOL_PI_AXI_VERIFY` set to a value unique to the run, sends one `get_state` command, and waits at most 30 seconds. It fails when Pi exits non-zero (a load failure: `error` quotes Pi's `Failed to load extension` line), when SoL-Pi reports a handler error (an `extension_error` inside its package, such as an invalid `sol-pi.json` at `session_start`), when no `get_state` response arrives, or when Pi started without loading SoL-Pi (no load signal carried the run's value, for example because a resource filter in `settings.json` excludes it). An extension that opens a dialog (`select`, `confirm`, `input` or `editor`) in `session_start` holds Pi until the 30-second bound kills it; `error` then names the dialog's method and title, as Pi does not name the extension that opened it. Another extension's `extension_error` is a warning. Its envelope adds `outcome` (`verified`, `failed` or `cancelled`), `verify`, `extension` (`state`, `source`) and `context` (`agentDir`); `verify` has `ok`, `loaded` (SoL-Pi's load signal was seen), `exit` (Pi's exit code, `null` when Pi was killed or not started) and `errors` (SoL-Pi's own `extensionPath`, `event`, `error` entries). Exit codes: 0 `verified`, 1 `failed`, 130, 143 and 129 `cancelled`. On failure `help` holds the fix: `sol-pi-axi install` when no usable source is registered; for an invalid agent-directory `sol-pi.json`, correct it, or delete it and run `sol-pi-axi install`; otherwise `sol-pi-axi install` and `sol-pi-axi uninstall`. Pi may create `auth.json` and `models-store.json` in the agent directory. Require exit status 0 and `ok: true`.
+
 ### The home view's extension
 
 With no verb, the home view also shows the extension: `extension` has `state` (`absent` or `registered`) and the registered `source`. When the registered source is not `npm:@anthill-tec/sol-pi` at `sol-pi-axi`'s own version, the home view warns and adds `sol-pi-axi install` to `help`.
@@ -161,7 +165,7 @@ The project file replaces the user-wide file; the two are not merged. If both ex
 
 Do not put provider URL, credentials, shell path, command prefix, storage path, or run ID in `sol-pi.json`. SoL-Pi either reads those values from Pi or derives them from the Pi session.
 
-The extension reads no dedicated environment variables. The `sol-pi-axi` command reads `PI_CODING_AGENT_DIR` to find the agent directory (default `~/.pi/agent`). Evidence-Preserving Reducer uses the configured reducer provider/model route and Pi-managed authentication. Configure credentials in Pi and do not copy them into `sol-pi.json`.
+The extension reads one environment variable, `SOL_PI_AXI_VERIFY`, only to answer `sol-pi-axi verify` (it sends the load signal that check waits for). The `sol-pi-axi` command reads `PI_CODING_AGENT_DIR` to find the agent directory (default `~/.pi/agent`). Evidence-Preserving Reducer uses the configured reducer provider/model route and Pi-managed authentication. Configure credentials in Pi and do not copy them into `sol-pi.json`.
 
 From `sol_pi_root`, validate the exact effective file:
 
@@ -179,6 +183,7 @@ Require exit status 0 and retain its JSON output. The check applies SoL-Pi's def
 2. Run `check-sol-pi-config.mjs --require-all-enabled` against the effective `sol-pi.json`, and re-run `check-pi-compat.mjs --strict --pi-root` against the installed Pi.
 3. Re-run `bun test --timeout 30000 tests/all-mechanisms.test.ts` from `sol_pi_root`.
 4. Start Pi with `--offline --approve`, send no prompt, confirm there is no extension load error, and exit.
+   `sol-pi-axi verify` makes the same check without starting an interactive Pi: require exit status 0 and `outcome: verified`.
 5. Confirm that upstream Pi was not patched and that the SoL-Pi checkout contains no vendored Pi monorepo source.
 
 ## Completion report

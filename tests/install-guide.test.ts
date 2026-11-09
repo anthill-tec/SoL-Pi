@@ -223,12 +223,24 @@ describe("sol-pi-axi documentation", () => {
 		expect(readme).toMatch(new RegExp(`pi install npm:@anthill-tec/sol-pi@${versionPattern()}`, "u"));
 	});
 
-	it("states that the extension reads no environment variables and sol-pi-axi reads PI_CODING_AGENT_DIR", () => {
+	// CR-SLP-008 §S5 rewrites this case: the extension now reads one environment variable,
+	// SOL_PI_AXI_VERIFY, only to answer `sol-pi-axi verify`.
+	it("states that the extension reads one environment variable, SOL_PI_AXI_VERIFY, and sol-pi-axi reads PI_CODING_AGENT_DIR", () => {
 		for (const name of ["README.md", "agents-install.md", "docs/configuration.md"]) {
 			const text = rootFile(name);
-			// The old statement covered all of SoL-Pi; the extension alone now reads none.
 			expect(text, name).not.toMatch(/SoL-Pi (reads|uses) no (dedicated )?environment variables/u);
-			expect(text, name).toMatch(/extension[^\n]*\bno\b[^\n]*environment variables/iu);
+			// No statement that the extension reads no environment variables remains.
+			expect(text, name).not.toMatch(/extension[^\n.]*\b(reads|uses) no\b[^\n.]*environment variables/iu);
+			const paragraphs = text.split(/\n\s*\n/u);
+			expect(
+				paragraphs.some(
+					(paragraph) =>
+						paragraph.includes("SOL_PI_AXI_VERIFY") &&
+						/extension[^.]*\bone\b[^.]*environment variable/iu.test(paragraph) &&
+						paragraph.includes("sol-pi-axi verify"),
+				),
+				`${name}: the extension reads one environment variable, SOL_PI_AXI_VERIFY, only to answer sol-pi-axi verify`,
+			).toBe(true);
 			const lines = text.split(/\r?\n/u);
 			expect(
 				lines.some((line) => line.includes("sol-pi-axi") && line.includes("PI_CODING_AGENT_DIR")),
@@ -236,6 +248,30 @@ describe("sol-pi-axi documentation", () => {
 			).toBe(true);
 		}
 	});
+
+	// CR-SLP-008 §S5: `verify`, the check `install` runs, what fails it and its `verify` key.
+	for (const name of ["README.md", "agents-install.md"]) {
+		it(`${name} documents sol-pi-axi verify, the check in install, what fails it and the verify key`, () => {
+			const text = rootFile(name);
+			expect(text).toContain("sol-pi-axi verify");
+			expect(text).toContain("verified");
+			for (const key of ["verify", "loaded", "exit", "errors"]) expect(documentsKey(text, key), `verify key ${key}`).toBe(true);
+			const paragraphs = text.split(/\n\s*\n/u);
+			expect(
+				paragraphs.some((paragraph) => paragraph.includes("sol-pi-axi install") && /\b(check|verif(y|ies|ied))\b/iu.test(paragraph) && /\bPi\b/u.test(paragraph)),
+				`${name}: install ends by checking that Pi loads SoL-Pi`,
+			).toBe(true);
+			// What fails it: a load failure, SoL-Pi's own handler error, a start without SoL-Pi, the bound.
+			expect(text).toMatch(/Failed to load extension|fails to load|load failure/iu);
+			expect(text).toMatch(/extension_error|handler error/iu);
+			expect(text).toMatch(/without loading SoL-Pi|does not load SoL-Pi|SoL-Pi (is )?not loaded/iu);
+			expect(text).toMatch(/\b30 (seconds|s)\b/u);
+			expect(text).toMatch(/dialog/iu);
+			// Pi may create files in the agent directory.
+			expect(text).toContain("auth.json");
+			expect(text).toContain("models-store.json");
+		});
+	}
 
 	it("docs/configuration.md and agents-install.md state the layout each part supports", () => {
 		for (const name of ["docs/configuration.md", "agents-install.md"]) {
@@ -439,5 +475,15 @@ describe("registry install documentation", () => {
 		expect(section).toMatch(/`sol-pi-axi`|\bsol-pi-axi\b(?!-)/u);
 		expect(section).toMatch(/sol-pi-axi install\b|`install`/u);
 		expect(section).toMatch(/sol-pi-axi uninstall\b|`uninstall`/u);
+	});
+
+	// CR-SLP-008 §S5.
+	it("CHANGELOG.md [Unreleased] names verify, the check and the load signal, and no longer says the extension reads no environment variables", () => {
+		const section = unreleasedSection(rootFile("CHANGELOG.md"));
+		expect(section).toContain("sol-pi-axi verify");
+		expect(section).toMatch(/sol-pi-axi install[^.]*\bcheck|\bcheck[^.]*sol-pi-axi install|`install`[^.]*\bcheck/iu);
+		expect(section).toContain("SOL_PI_AXI_VERIFY");
+		expect(section).toMatch(/load signal/iu);
+		expect(section).not.toMatch(/extension[^.]*\b(reads|uses) no\b[^.]*environment variables/iu);
 	});
 });

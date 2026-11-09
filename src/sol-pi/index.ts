@@ -38,6 +38,10 @@ export function createSolPiExtension(
 		pi.on("session_start", (_event, ctx) => {
 			if (initialized) return;
 			initialized = true;
+			// The load signal sol-pi-axi verify waits for: sent first, so it reaches the check even when
+			// the configuration below is invalid.
+			const verifyValue = process.env.SOL_PI_AXI_VERIFY;
+			if (verifyValue) ctx.ui.notify(`sol-pi-axi verify ${verifyValue}`, "info");
 			const config = loadConfig(ctx);
 			const bashOptions = config.actionFusion
 				? loadActionFusionBashOptions(ctx.cwd, ctx.isProjectTrusted())
