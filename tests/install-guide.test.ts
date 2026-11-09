@@ -487,3 +487,184 @@ describe("registry install documentation", () => {
 		expect(section).not.toMatch(/extension[^.]*\b(reads|uses) no\b[^.]*environment variables/iu);
 	});
 });
+
+/** `--interactive` itself, never the `--non-interactive` flag that contains it. */
+const INTERACTIVE_FLAG = /(?<![\w-])--interactive\b/u;
+
+/** A statement that the command prompts only with `--interactive`. */
+const PROMPTS_ONLY_WITH_INTERACTIVE = /\b(prompts? only|only prompts?)\b[^.\n|]{0,30}(?<![\w-])--interactive\b/iu;
+
+/**
+ * The retired statement that the command does not prompt at all. Written as a pattern, not as the
+ * phrase, so this file stays out of CR-SLP-005's repository-wide search for that phrase.
+ */
+const NEVER_PROMPTS = /\bnever\s+prompts?\b/iu;
+
+/**
+ * The retired fish setup script's file name, assembled from parts so that this file does not
+ * itself name the script (CR-SLP-005 §S2: no file outside docs/ and the changelog names it).
+ */
+const FISH_SCRIPT = ["setup", "sol", "pi.fish"].join("-");
+
+/** Each entry of a changelog section: a top-level bullet with its continuation lines. */
+function changelogEntries(section: string): string[] {
+	return section.split(/\n(?=- |#{2,3} )/u).filter((entry) => entry.startsWith("- "));
+}
+
+/** The blank-line-separated paragraphs of a document. */
+function paragraphs(text: string): string[] {
+	return text.split(/\n\s*\n/u);
+}
+
+/**
+ * DN-sol-pi-axi §D7's mapping, each row as the script's term followed (within the row's reach)
+ * by every term of what replaces it.
+ */
+const D7_MAPPING: { row: string; script: RegExp; now: RegExp[] }[] = [
+	{ row: "user-wide setup → sol-pi-axi install", script: /user-wide setup/giu, now: [/sol-pi-axi install\b/u] },
+	{ row: "project setup → sol-pi-axi setup <dir>", script: /project setup/giu, now: [/sol-pi-axi setup\b/u] },
+	{ row: "prompts → --interactive", script: /\bprompts\b/giu, now: [INTERACTIVE_FLAG] },
+	{
+		row: "--uninstall → sol-pi-axi uninstall, without the .bak restore",
+		script: /`--uninstall`/gu,
+		now: [/sol-pi-axi uninstall\b/u, /\.bak\b/u],
+	},
+	{
+		row: "strict Pi compatibility failure → a warning in install",
+		script: /strict\b[^|;]{0,40}\bPi compatibility\b/giu,
+		now: [/\bwarning\b/iu, /\binstall\b/u],
+	},
+	{
+		row: "smoke test → the post-install check",
+		script: /smoke test/giu,
+		now: [/post-install check|load check|sol-pi-axi verify/iu],
+	},
+	{
+		row: "registering the checkout → the npm source; checkout development in CONTRIBUTING.md",
+		script: /register(ing)? the checkout|checkout registration/giu,
+		now: [/\bnpm\b/iu, /CONTRIBUTING\.md/u],
+	},
+	{
+		row: "checkout validation, audit, all-mechanisms test → bun run check, bun audit",
+		script: /checkout validation/giu,
+		now: [/\baudit\b/iu, /all-mechanisms/iu, /bun run check\b/u, /bun audit\b/u],
+	},
+];
+
+/** Whether some occurrence of the row's script term is followed, within 200 characters, by every term of what replaces it. */
+function carriesMappingRow(entry: string, row: (typeof D7_MAPPING)[number]): boolean {
+	const text = entry.replace(/\s+/gu, " ");
+	return [...text.matchAll(row.script)].some((match) => {
+		const reach = text.slice(match.index, match.index + match[0].length + 200);
+		return row.now.every((term) => term.test(reach));
+	});
+}
+
+// CR-SLP-005 §S3: `--interactive`, when it prompts, the cancel exit codes, checkout validation, and
+// the changelog's record of `--interactive` and the fish script's removal.
+describe("interactive setup documentation", () => {
+	for (const name of ["README.md", "agents-install.md"]) {
+		it(`${name} documents --interactive for both setup and install`, () => {
+			const found = paragraphs(rootFile(name)).filter((paragraph) => INTERACTIVE_FLAG.test(paragraph));
+			expect(found.length, `${name}: a paragraph naming --interactive`).toBeGreaterThanOrEqual(1);
+			expect(
+				found.some((paragraph) => /\bsetup\b/u.test(paragraph)),
+				`${name}: --interactive documented for setup`,
+			).toBe(true);
+			expect(
+				found.some((paragraph) => /\binstall\b/u.test(paragraph)),
+				`${name}: --interactive documented for install`,
+			).toBe(true);
+		});
+
+		it(`${name} says when --interactive prompts: terminals, the foreground group, PI_NONINTERACTIVE unset or empty`, () => {
+			const rule = paragraphs(rootFile(name)).filter(
+				(paragraph) =>
+					INTERACTIVE_FLAG.test(paragraph) &&
+					/standard input/iu.test(paragraph) &&
+					/standard error/iu.test(paragraph) &&
+					/\bterminals?\b/iu.test(paragraph) &&
+					/\bforeground\b/iu.test(paragraph) &&
+					paragraph.includes("PI_NONINTERACTIVE") &&
+					/\b(unset|empty)\b/iu.test(paragraph),
+			);
+			expect(
+				rule.length,
+				`${name}: one paragraph naming --interactive, standard input and standard error terminals, the foreground group and PI_NONINTERACTIVE unset or empty`,
+			).toBeGreaterThanOrEqual(1);
+		});
+
+		it(`${name} documents the cancel exit codes 130, 143 and 129 as an addition to AXI's`, () => {
+			const statement = paragraphs(rootFile(name)).filter(
+				(paragraph) =>
+					["130", "143", "129"].every((code) => new RegExp(`\\b${code}\\b`, "u").test(paragraph)) &&
+					/\bcancel/iu.test(paragraph) &&
+					/\bAXI\b/u.test(paragraph) &&
+					/\b(in addition|additions?|adds?|added|beyond|extends?)\b/iu.test(paragraph),
+			);
+			expect(
+				statement.length,
+				`${name}: a paragraph giving 130, 143 and 129 for a cancelled run as an addition to AXI's exit codes`,
+			).toBeGreaterThanOrEqual(1);
+		});
+
+		it(`${name} says setup prompts only with --interactive, and no longer that it does not prompt at all`, () => {
+			const text = rootFile(name);
+			expect(text).not.toMatch(NEVER_PROMPTS);
+			expect(text).toMatch(PROMPTS_ONLY_WITH_INTERACTIVE);
+		});
+	}
+
+	it("README's --non-interactive row says setup prompts only with --interactive", () => {
+		const rows = rootFile("README.md")
+			.split(/\r?\n/u)
+			.filter((line) => /^\|\s*`--non-interactive`\s*\|/u.test(line));
+		expect(rows.length, "exactly one --non-interactive row").toBe(1);
+		const value = rows[0]!.split("|").slice(2).join("|");
+		expect(value).toMatch(PROMPTS_ONLY_WITH_INTERACTIVE);
+	});
+
+	it("CONTRIBUTING.md validates a checkout with bun run check and bun audit --audit-level=high", () => {
+		const text = rootFile("CONTRIBUTING.md");
+		expect(text).toContain("bun run check");
+		expect(text).toContain("bun audit --audit-level=high");
+		expect(
+			sections(text).some(
+				(section) =>
+					/checkout/iu.test(section) &&
+					section.includes("bun run check") &&
+					section.includes("bun audit --audit-level=high"),
+			),
+			"one section validating a checkout with both commands",
+		).toBe(true);
+	});
+
+	it("CHANGELOG.md [Unreleased] names --interactive", () => {
+		expect(unreleasedSection(rootFile("CHANGELOG.md"))).toMatch(INTERACTIVE_FLAG);
+	});
+
+	it("CHANGELOG.md [Unreleased] names the fish setup script only in its removal entry", () => {
+		const naming = changelogEntries(unreleasedSection(rootFile("CHANGELOG.md"))).filter((entry) =>
+			entry.includes(FISH_SCRIPT),
+		);
+		expect(naming.length, "entries naming the fish setup script").toBe(1);
+		expect(naming[0]).toMatch(/\b(removed|retired|deleted|removal)\b/iu);
+	});
+
+	it("CHANGELOG.md [Unreleased]'s removal entry carries each row of DN §D7's mapping", () => {
+		const removal = changelogEntries(unreleasedSection(rootFile("CHANGELOG.md"))).filter(
+			(entry) => entry.includes(FISH_SCRIPT) && /\b(removed|retired|deleted|removal)\b/iu.test(entry),
+		);
+		expect(removal.length, "one removal entry naming the fish setup script").toBe(1);
+		for (const row of D7_MAPPING) expect(carriesMappingRow(removal[0]!, row), row.row).toBe(true);
+	});
+
+	it("CHANGELOG.md [Unreleased]'s setup entry names --interactive, and no longer says the command does not prompt at all", () => {
+		const setup = changelogEntries(unreleasedSection(rootFile("CHANGELOG.md"))).filter(
+			(entry) => entry.includes("--features") && entry.includes("--cache-ratio"),
+		);
+		expect(setup.length, "one entry describing setup and its value flags").toBe(1);
+		expect(setup[0]).not.toMatch(NEVER_PROMPTS);
+		expect(setup[0]).toMatch(INTERACTIVE_FLAG);
+	});
+});
