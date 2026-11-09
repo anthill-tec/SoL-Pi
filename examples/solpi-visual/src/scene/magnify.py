@@ -41,7 +41,8 @@ def main():
  if a.reference:assets['reference_crop']=extract(a.reference,a.reference_bbox,a.scale,a.interpolation,a.max_side)
  identity=dict(version=VERSION,tool_sha256=digest(pathlib.Path(__file__).read_bytes()),images={k:v[1] for k,v in assets.items()})
  key=digest(json.dumps(identity,sort_keys=True,separators=(',',':')).encode());root=pathlib.Path(a.output_root).resolve();root.mkdir(parents=True,exist_ok=True);target=root/key
- receipt=dict(identity,artifact_id=key,global_image_unchanged=True,evaluation_unchanged=True,synthetic_content=False,creates_new_detail=False,images={k:dict(v[1],output_path=str(target/(k+'.png'))) for k,v in assets.items()})
+ images={k:dict(v[1],output_path=str(target/(k+'.png'))) for k,v in assets.items()}
+ receipt=dict(identity,artifact_id=key,global_image_unchanged=True,evaluation_unchanged=True,synthetic_content=False,creates_new_detail=False,images=images)
  encoded=(json.dumps(receipt,indent=2,sort_keys=True)+'\n').encode()
  def verify_existing():
   if (target/'RECEIPT.json').read_bytes()!=encoded or any(digest((target/(k+'.png')).read_bytes())!=v[1]['output_sha256'] for k,v in assets.items()):raise ValueError('Existing artifact differs; refusing overwrite')
@@ -62,5 +63,5 @@ def main():
    if temp.exists():
     for child in temp.iterdir():child.unlink()
     temp.rmdir()
- print(json.dumps(dict(artifact_id=key,receipt=str(target/'RECEIPT.json'),cached=cached,images={k:{f:v for f,v in m.items() if f in ['output_path','source_sha256','bbox','actual_scale','output_size','coordinate_space']} for k,m in receipt['images'].items()})))
+ print(json.dumps(dict(artifact_id=key,receipt=str(target/'RECEIPT.json'),cached=cached,images={k:{f:v for f,v in m.items() if f in ['output_path','source_sha256','bbox','actual_scale','output_size','coordinate_space']} for k,m in images.items()})))
 if __name__=='__main__':main()
