@@ -1,6 +1,6 @@
 # CR-SLP-005 — `--interactive` for `setup` and `install`; the fish setup script removed
 
-**Status:** PENDING · Pre-review: ran — touches another project's surface (Model B passes a terminal to the interactive run, #1516 item 3)
+**Status:** COMPLETED · Pre-review: ran — touches another project's surface (Model B passes a terminal to the interactive run, #1516 item 3)
 **Type:** feature
 **Priority:** P1 — completes Model B's request; `sol-pi-axi` becomes the only setup
 **Depends on:** CR-SLP-004, CR-SLP-007, CR-SLP-008
