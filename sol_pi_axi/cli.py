@@ -13,7 +13,9 @@ from ._version import __version__
 _HELP_FLAGS = ("-h", "--help")
 _VERSION_FLAGS = ("-v", "-V", "--version")
 _VALUE_FLAGS = ("--features", "--reducer", "--cache-ratio", "--format")
-_SETUP_FLAGS = ("--features", "--reducer", "--cache-ratio", "--non-interactive")
+_SETUP_FLAGS = ("--features", "--reducer", "--cache-ratio", "--non-interactive", "--interactive")
+#: The flags that take no value.
+_SWITCH_FLAGS = ("--non-interactive", "--interactive")
 #: The flags that set configuration values (`setup` and `install`).
 _VALUE_SETTING_FLAGS = ("--features", "--reducer", "--cache-ratio")
 _VERBS = ("setup", "install", "uninstall", "verify")
@@ -57,14 +59,22 @@ Flags (flags go before or after the argument; --flag value or --flag=value):
                             (default: the base values; with none, Pi's default provider and model)
   --cache-ratio <number>    setup, install: the cache write/read ratio, digits with an optional
                             fraction (default: the base values; with none, 12.5)
-  --non-interactive         setup, install, uninstall: accepted, no effect (sol-pi-axi never
-                            prompts)
+  --interactive             setup, install: prompt on the terminal for the configuration
+                            values (the defaults are the values above), show the result and ask
+                            to proceed; install prompts only when it writes the agent
+                            directory's sol-pi.json. Prompts only when standard input and
+                            standard error are terminals, the run is in the terminal's
+                            foreground process group and PI_NONINTERACTIVE is unset or empty;
+                            otherwise a warning says why and the run goes on without prompts
+  --non-interactive         setup, install, uninstall: accepted, no effect (sol-pi-axi prompts
+                            only with --interactive)
   --format toon|json        the envelope's encoding (default: toon); json is one line
   -h, --help                print this help and exit 0
   -v, -V, --version         print the version and exit 0
 
 Exit codes: 0 written, installed, removed, unchanged, verified or the home view; 1 failed; 2 usage error;
-130, 143, 129 cancelled by SIGINT, SIGTERM, SIGHUP.
+130, 143, 129 cancelled by SIGINT, SIGTERM, SIGHUP; with --interactive, 130 also for a declined
+confirmation or Ctrl+D at a prompt, and 129 for a closed terminal.
 
 Examples:
   sol-pi-axi
@@ -72,6 +82,7 @@ Examples:
   sol-pi-axi uninstall
   sol-pi-axi verify
   sol-pi-axi setup .
+  sol-pi-axi setup . --interactive
   sol-pi-axi setup ~/work/app --features actionFusion,observationPack --cache-ratio 8
   sol-pi-axi setup ~/work/app --reducer anthropic/claude-sonnet-4-5 --format json
 """
@@ -79,7 +90,7 @@ Examples:
 _VALID_INPUT = ("valid verbs: setup <project dir>, install, uninstall, verify (no verb: the home "
                 "view); "
                 "valid flags: "
-                "--features, --reducer, --cache-ratio, --format, --non-interactive, "
+                "--features, --reducer, --cache-ratio, --format, --interactive, --non-interactive, "
                 "-h/--help, -v/-V/--version")
 
 
@@ -159,17 +170,18 @@ def _parse(args: list[str]) -> dict:
         index += 1
         if arg.startswith("-") and arg != "-":
             name, has_value, value = arg.partition("=")
-            if name not in _VALUE_FLAGS and name != "--non-interactive":
+            if name not in _VALUE_FLAGS and name not in _SWITCH_FLAGS:
                 hint = None
                 if name == "--yes":
-                    hint = ("sol-pi-axi never prompts, so there is nothing to confirm: drop --yes "
-                            "(--non-interactive is accepted and has no effect)")
+                    hint = ("sol-pi-axi prompts only with --interactive, so there is nothing to "
+                            "confirm: drop --yes (--non-interactive is accepted and has no "
+                            "effect)")
                 raise UsageError(f"unknown flag {name}", hint=hint)
             if name in flags:
                 raise UsageError(f"repeated flag {name}")
-            if name == "--non-interactive":
+            if name in _SWITCH_FLAGS:
                 if has_value:
-                    raise UsageError(f"--non-interactive takes no value: {arg}")
+                    raise UsageError(f"{name} takes no value: {arg}")
                 flags[name] = ""
                 continue
             if not has_value:
@@ -196,6 +208,9 @@ def _parse(args: list[str]) -> dict:
         if len(positionals) > 1:
             raise UsageError(f"extra argument {positionals[1]} ({verb} takes no argument)")
         if verb == "uninstall":
+            if "--interactive" in flags:
+                raise UsageError("--interactive does not apply to uninstall, which prompts for "
+                                 "nothing")
             for name in _VALUE_SETTING_FLAGS:
                 if name in flags:
                     raise UsageError(f"{name} does not apply to uninstall, which writes no "
@@ -211,10 +226,13 @@ def _parse(args: list[str]) -> dict:
             if name in flags:
                 raise UsageError(f"{name} belongs to setup: sol-pi-axi setup <project dir> {name}")
 
+    if "--interactive" in flags and "--non-interactive" in flags:
+        raise UsageError("--interactive and --non-interactive cannot be given together")
     if "--format" in flags and flags["--format"] not in _FORMATS:
         raise UsageError(f"--format must be toon or json, got {flags['--format']!r}")
     command = {"verb": verb, "project": positionals[1] if verb == "setup" else None,
-               "features": None, "reducer": None, "cache_ratio": None}
+               "features": None, "reducer": None, "cache_ratio": None,
+               "interactive": "--interactive" in flags}
     if "--features" in flags:
         command["features"] = _parse_features(flags["--features"])
     if "--reducer" in flags:
@@ -272,34 +290,46 @@ def _setup(command: dict) -> tuple[dict, int]:
     import os
 
     from . import config, setup
+    from .prompt import PromptCancel
 
     project = os.path.abspath(command["project"])
     context: dict = {"project": project, "agentDir": None}
     envelope: dict = {"verb": "setup", "ok": False, "version": __version__, "outcome": "failed",
                       "path": None, "config": None, "context": context}
+    session, warnings = _interaction(command)
+    ask = None
     try:
         try:
             _arm()
             agent = config.agent_dir()
             context["agentDir"] = str(agent)
+            if session is not None:
+                ask = _asker(session, agent, _target(project))
             result = setup.run_setup(project, agent_dir=agent, features=command["features"],
                                      reducer=command["reducer"],
                                      cache_ratio=command["cache_ratio"], hook=_hold_hook(),
-                                     on_rename=_disarm)
+                                     on_rename=_disarm, ask=ask)
         finally:
             _disarm()
-    except Cancelled as cancel:
-        name = _signal_name(cancel.signum)
-        envelope.update(outcome="cancelled", path=_target(project),
-                        error=f"cancelled by {name}; nothing was written", warnings=[], help=[])
-        return envelope, 128 + cancel.signum
+    except (Cancelled, PromptCancel) as cancel:
+        cause, code = _cancel_cause(cancel)
+        rerun = ([f"sol-pi-axi setup {_quote(project)} --interactive"]
+                 if session is not None else [])
+        shown = (session.shown if session is not None and not session.confirmed
+                 and any(value is not None for value in session.shown.values()) else None)
+        envelope.update(outcome="cancelled", path=_target(project), config=shown,
+                        error=f"{cause}; nothing was written",
+                        warnings=_session_warnings(session, warnings), help=rerun)
+        return envelope, code
     except config.ConfigError as error:
-        envelope.update(path=_target(project), error=str(error), warnings=[],
+        envelope.update(path=_target(project), error=str(error),
+                        warnings=_session_warnings(session, warnings),
                         help=_fix_help(project, error.flag))
         return envelope, _EXIT_FAILED
     except Exception as error:  # noqa: BLE001 — an unexpected failure is `failed`, named
         envelope.update(path=_target(project), error=f"unexpected {type(error).__name__}: {error}",
-                        warnings=[], help=_fix_help(project, None))
+                        warnings=_session_warnings(session, warnings),
+                        help=_fix_help(project, None))
         return envelope, _EXIT_FAILED
 
     values = result.config
@@ -309,14 +339,51 @@ def _setup(command: dict) -> tuple[dict, int]:
                       ("in Pi, run /trust to trust the project, so the extensions read "
                        ".pi/sol-pi.json")]
     envelope.update(ok=True, outcome=result.outcome, path=str(result.path),
-                    config=_summary(values), warnings=list(result.warnings), help=help_steps)
+                    config=_summary(values),
+                    warnings=list(result.warnings) + _session_warnings(session, warnings),
+                    help=help_steps)
     return envelope, 0
+
+
+def _interaction(command: dict):
+    """`(session, warnings)` for `--interactive`: a prompt session when the run can prompt, else
+    None and the warning saying why; `(None, [])` without the flag."""
+    if not command.get("interactive"):
+        return None, []
+    from .prompt import Session, unavailable_reason, unavailable_warning
+
+    reason = unavailable_reason()
+    if reason is not None:
+        return None, [unavailable_warning(reason)]
+    return Session(), []
+
+
+def _asker(session, agent, path):
+    """The `ask` callback of a prompting run: the prompts, then the confirmation for `path`."""
+    def ask(values: dict) -> dict:
+        values = session.ask_values(values, agent)
+        session.confirm(path)
+        return values
+
+    return ask
+
+
+def _session_warnings(session, warnings: list[str]) -> list[str]:
+    return list(warnings) + (list(session.warnings) if session is not None else [])
+
+
+def _cancel_cause(cancel) -> tuple[str, int]:
+    """The `error` text and exit code of a signal's `Cancelled` or a prompt's `PromptCancel`."""
+    if isinstance(cancel, Cancelled):
+        return f"cancelled by {_signal_name(cancel.signum)}", 128 + cancel.signum
+    return cancel.cause, cancel.code
 
 
 def _install(command: dict) -> tuple[dict, int]:
     from . import _version, config
     from .install import InstallReport, run_install
     from .pi import PiError, recorded_sources
+    from .prompt import PromptCancel
 
     version = _version.__version__
     report = InstallReport(agent_dir=config.agent_dir())
@@ -325,18 +392,24 @@ def _install(command: dict) -> tuple[dict, int]:
     error_text = None
     help_steps: list[str] = []
     code = _EXIT_FAILED
+    session, unprompted = _interaction(command)
     try:
         try:
             _arm()
             run_install(report, version=version, features=command["features"],
                         reducer=command["reducer"], cache_ratio=command["cache_ratio"],
-                        on_rename=_disarm)
+                        on_rename=_disarm,
+                        ask=(_asker(session, report.agent_dir, report.agent_dir / "sol-pi.json")
+                             if session is not None else None),
+                        unprompted_warning=unprompted[0] if unprompted else None)
         finally:
             _disarm()
-    except Cancelled as cancel:
+    except (Cancelled, PromptCancel) as cancel:
         report.outcome = "cancelled"
-        error_text = f"cancelled by {_signal_name(cancel.signum)}"
-        code = 128 + cancel.signum
+        error_text, code = _cancel_cause(cancel)
+        if session is not None and session.started and not session.confirmed:
+            error_text = f"{error_text}; nothing was registered or written"
+            help_steps = ["sol-pi-axi install --interactive"]
     except PiError as error:
         error_text, help_steps = str(error), error.help
     except config.ConfigError as error:
@@ -367,7 +440,10 @@ def _install(command: dict) -> tuple[dict, int]:
     if report.source is not None:
         envelope["extension"] = {"source": report.source, "registered": report.registered,
                                  "replaced": list(report.replaced), "pi": report.pi_version}
-    if report.config_path is not None and report.config_state is not None:
+    if session is not None and session.started and not session.confirmed and code != 0:
+        # Cancelled or failed at the prompts: the values shown so far.
+        envelope["config"] = {"path": str(report.config_path), "state": None, **session.shown}
+    elif report.config_path is not None and report.config_state is not None:
         values = report.config_values
         summary = _summary(values) if values is not None else {
             "features": None, "reducer": None, "cacheRatio": None}
@@ -378,7 +454,7 @@ def _install(command: dict) -> tuple[dict, int]:
         envelope["error"] = error_text
     if report.outcome == "installed":
         help_steps = ["sol-pi-axi setup <project dir>"]
-    envelope.update(warnings=list(report.warnings), help=help_steps)
+    envelope.update(warnings=_session_warnings(session, report.warnings), help=help_steps)
     return envelope, code
 
 

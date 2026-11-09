@@ -32,6 +32,10 @@ invocation (its arguments and working directory) and edits `settings.json` as Pi
 - `install <npm source>` also creates the package's directory under
   `<agent dir>/npm/node_modules/<name>` with a `package.json` (an existing one, or a symbolic
   link standing in for the package, is left alone), as Pi's npm install does.
+- `install <source>` is held when `$SOL_PI_AXI_TEST_PI_HOLD` (`PI_HOLD_ENV`) names a file: once
+  `settings.json` records the source, the stub writes its process id and a newline to the named
+  file, then waits — polling — until that file no longer exists, and only then prints and exits.
+  Unset or empty, nothing is held.
 
 The agent directory is `$PI_CODING_AGENT_DIR` (a leading `~` expanded) else `~/.pi/agent`, as
 Pi's; `settings_dir` in the control file makes the stub act on another directory instead (a Pi
@@ -62,6 +66,8 @@ PI_PROVIDER = "anthropic"
 PI_MODEL = "claude-sonnet-4-5"
 #: The npm package the extension ships as.
 NPM_PACKAGE = "@anthill-tec/sol-pi"
+#: The environment variable naming the stub's `pi install` hold file (see the module docstring).
+PI_HOLD_ENV = "SOL_PI_AXI_TEST_PI_HOLD"
 
 #: The stub's program. `{control}` and `{log}` are filled in with the control and log files.
 _STUB_PROGRAM = r'''
@@ -232,6 +238,13 @@ if command == "install":
         existing = packages[index]
         packages[index] = normalized if isinstance(existing, str) else {{**existing, "source": normalized}}
         save(packages)
+    hold = os.environ.get("SOL_PI_AXI_TEST_PI_HOLD", "")
+    if hold:
+        import time
+        with open(hold, "w", encoding="utf-8") as handle:
+            handle.write(str(os.getpid()) + "\n")
+        while os.path.lexists(hold):
+            time.sleep(0.01)
     print(f"Installed {{source}}")
     sys.exit(0)
 

@@ -135,7 +135,7 @@ Enable additional mechanisms only after reviewing their configuration and securi
 
 ### `sol-pi-axi setup`
 
-`sol-pi-axi setup <project dir>` writes `<project dir>/.pi/sol-pi.json` (creating `.pi/` when missing) and nothing else. It never prompts. Its base values are a valid project file's values, else the agent directory's `sol-pi.json`, else the setup defaults: all four mechanisms on, ratio 12.5, and the reducer on Pi's `defaultProvider` and `defaultModel` from the agent directory's `settings.json`. With no value flag, a valid project file is left `unchanged`. The flags override the base values:
+`sol-pi-axi setup <project dir>` writes `<project dir>/.pi/sol-pi.json` (creating `.pi/` when missing) and nothing else. It prompts only with `--interactive` (see [Prompting with `--interactive`](#prompting-with---interactive)). Its base values are a valid project file's values, else the agent directory's `sol-pi.json`, else the setup defaults: all four mechanisms on, ratio 12.5, and the reducer on Pi's `defaultProvider` and `defaultModel` from the agent directory's `settings.json`. With no value flag, a valid project file is left `unchanged`. The flags override the base values:
 
 | Flag | Value |
 |---|---|
@@ -143,7 +143,8 @@ Enable additional mechanisms only after reviewing their configuration and securi
 | `--reducer` | `<provider>/<model>`, split at the first `/` |
 | `--cache-ratio` | digits with an optional decimal fraction |
 | `--format` | `toon` (default) or `json` |
-| `--non-interactive` | accepted, no effect |
+| `--interactive` | prompt for the values, then confirm (see below) |
+| `--non-interactive` | accepted; setup prompts only with `--interactive`, and the two together are a usage error |
 | `-h`, `--help` | plain-text help |
 | `-v`, `-V`, `--version` | the bare version |
 
@@ -171,6 +172,14 @@ Exit codes: exit code 0 for `written`, `unchanged` and the home view; 1 for `fai
 The home view also shows the extension: `extension` has `state` (`absent` or `registered`) and the registered `source`. When the registered source is not `npm:@anthill-tec/sol-pi` at `sol-pi-axi`'s own version, the home view warns and adds `sol-pi-axi install` to `help`.
 
 For the complete schema, see [Configuration](https://github.com/anthill-tec/SoL-Pi/blob/main/docs/configuration.md). Coding agents and automated environments should follow the canonical [agent installation and configuration protocol](https://github.com/anthill-tec/SoL-Pi/blob/main/agents-install.md), which describes an all-enabled configuration checked with `scripts/check-sol-pi-config.mjs --require-all-enabled`.
+
+### Prompting with `--interactive`
+
+`sol-pi-axi setup --interactive` and `sol-pi-axi install --interactive` ask for the values instead of taking them only from flags: each mechanism (yes or no), the reducer's `<provider>/<model>` when the reducer is on, and the cache ratio. The defaults are the values the run would use without `--interactive`, after any value flags; an answer the matching flag would reject repeats the prompt, and the reducer prompt suggests the usable `enabledModels` entries of the agent directory's `settings.json`. The run then shows the result and asks for confirmation. `setup` prompts for the project file's values; `install` prompts only when it will create the agent directory's `sol-pi.json`, and otherwise installs without prompting. Prompts go to standard error; standard output carries only the envelope. `--interactive` is a usage error with `--non-interactive`, with no verb, and on `uninstall` and `verify`.
+
+`--interactive` prompts only when standard input and standard error are both terminals, the process group is that terminal's foreground group, and `PI_NONINTERACTIVE` is unset or empty. Otherwise the run adds a warning saying why and runs as it would without `--interactive`, with the same outcome and exit code.
+
+A prompted run can be cancelled before the confirmation: declining it, Ctrl+C, Ctrl+D on an empty line or `SIGINT` exit 130, `SIGTERM` 143, and a closed terminal (`SIGHUP`) 129. These cancel exit codes are an addition to AXI's exit codes (0, 1 and 2); a cancelled run prints a `cancelled` envelope, writes and registers nothing, and leaves no temporary file.
 
 ### Pi 1.x and codemode
 
