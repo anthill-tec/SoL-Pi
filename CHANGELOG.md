@@ -15,7 +15,7 @@ All notable changes to this project are documented in this file. The format is b
   model), overridden by `--features`, `--reducer` and `--cache-ratio`; it never prompts, writes
   atomically, and a signal cancels it leaving nothing behind. Every run prints one TOON envelope
   (or one JSON line with `--format json`) with documented exit codes; with no verb it prints a
-  home view. It reads `PI_CODING_AGENT_DIR`; the extension still reads no environment variables.
+  home view. It reads `PI_CODING_AGENT_DIR`.
   Its one runtime dependency is `toon-format` 1.2.0 (MIT).
 - Registry distribution: SoL-Pi is published as two packages sharing one version, the
   `sol-pi-axi` command on PyPI and the Pi extension `@anthill-tec/sol-pi` on npm.
@@ -24,6 +24,15 @@ All notable changes to this project are documented in this file. The format is b
   `sol-pi.json` with the setup defaults when it has none; `sol-pi-axi uninstall` removes every
   SoL-Pi source and deletes no configuration file. The home view shows the extension's
   registration. The release workflow tests both stacks and publishes both packages.
+- `sol-pi-axi verify` checks that Pi loads SoL-Pi, registering nothing and writing no file:
+  exactly one SoL-Pi source registered with its package on disk, then one
+  `pi --offline --no-approve --mode rpc --no-session` start from home, bounded at 30 seconds, that
+  must show SoL-Pi's load signal, answer `get_state` and report no SoL-Pi `extension_error`.
+  `sol-pi-axi install` runs the same check last, and a failed check fails the run without removing
+  or rewriting anything; both envelopes carry `verify` (`ok`, `loaded`, `exit`, `errors`).
+- The load signal: the extension reads one environment variable, `SOL_PI_AXI_VERIFY`, only to
+  answer `sol-pi-axi verify`; when it holds a value, SoL-Pi's `session_start` first notifies
+  `sol-pi-axi verify <value>`, before reading its configuration.
 - Pi 1.5.0 support: Pi 1.5.0 joins the tested set (0.84.2, 1.0.4, 1.3.0, 1.5.0) as the latest
   tested release, the development dependency and the documented default install.
   `scripts/check-pi-compat.mjs --strict` passes on it, and its mixed-internal-packages warning now

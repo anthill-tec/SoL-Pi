@@ -16,7 +16,7 @@ _VALUE_FLAGS = ("--features", "--reducer", "--cache-ratio", "--format")
 _SETUP_FLAGS = ("--features", "--reducer", "--cache-ratio", "--non-interactive")
 #: The flags that set configuration values (`setup` and `install`).
 _VALUE_SETTING_FLAGS = ("--features", "--reducer", "--cache-ratio")
-_VERBS = ("setup", "install", "uninstall")
+_VERBS = ("setup", "install", "uninstall", "verify")
 _FORMATS = ("toon", "json")
 #: The test-only hold between write and rename (see `_hold_hook`).
 _HOLD_ENV = "SOL_PI_AXI_TEST_HOLD"
@@ -40,8 +40,13 @@ Verbs:
   install                   register npm:@anthill-tec/sol-pi@<this version> with pi install
                             (user-wide, from home, --no-approve; $PI_BIN, else pi on PATH),
                             replace earlier SoL-Pi sources, and write the agent directory's
-                            sol-pi.json with the setup defaults when it is absent
+                            sol-pi.json with the setup defaults when it is absent, then run
+                            the check verify runs (a failed check fails install)
   uninstall                 remove every SoL-Pi source with pi remove; deletes no sol-pi.json
+  verify                    check that Pi loads SoL-Pi: one SoL-Pi source registered, its
+                            package on disk, then pi --offline --no-approve --mode rpc
+                            --no-session from home (bounded at 30 s) must show SoL-Pi's load
+                            signal and no SoL-Pi error; registers nothing, writes no file
 
 Flags (flags go before or after the argument; --flag value or --flag=value):
   --features <list>         setup, install: all, none, or a comma list of actionFusion,
@@ -58,19 +63,21 @@ Flags (flags go before or after the argument; --flag value or --flag=value):
   -h, --help                print this help and exit 0
   -v, -V, --version         print the version and exit 0
 
-Exit codes: 0 written, installed, removed, unchanged or the home view; 1 failed; 2 usage error;
+Exit codes: 0 written, installed, removed, unchanged, verified or the home view; 1 failed; 2 usage error;
 130, 143, 129 cancelled by SIGINT, SIGTERM, SIGHUP.
 
 Examples:
   sol-pi-axi
   sol-pi-axi install
   sol-pi-axi uninstall
+  sol-pi-axi verify
   sol-pi-axi setup .
   sol-pi-axi setup ~/work/app --features actionFusion,observationPack --cache-ratio 8
   sol-pi-axi setup ~/work/app --reducer anthropic/claude-sonnet-4-5 --format json
 """
 
-_VALID_INPUT = ("valid verbs: setup <project dir>, install, uninstall (no verb: the home view); "
+_VALID_INPUT = ("valid verbs: setup <project dir>, install, uninstall, verify (no verb: the home "
+                "view); "
                 "valid flags: "
                 "--features, --reducer, --cache-ratio, --format, --non-interactive, "
                 "-h/--help, -v/-V/--version")
@@ -121,6 +128,8 @@ def _run(args: list[str]) -> int:
         envelope, code = _install(command)
     elif command["verb"] == "uninstall":
         envelope, code = _uninstall()
+    elif command["verb"] == "verify":
+        envelope, code = _verify()
     else:
         envelope, code = _home()
     return _emit(envelope, fmt, code)
@@ -191,6 +200,12 @@ def _parse(args: list[str]) -> dict:
                 if name in flags:
                     raise UsageError(f"{name} does not apply to uninstall, which writes no "
                                      "configuration")
+    elif verb == "verify":
+        if len(positionals) > 1:
+            raise UsageError(f"extra argument {positionals[1]} (verify takes no argument)")
+        for name in flags:
+            if name != "--format":
+                raise UsageError(f"{name} does not apply to verify, which takes only --format")
     else:
         for name in _SETUP_FLAGS:
             if name in flags:
@@ -335,6 +350,13 @@ def _install(command: dict) -> tuple[dict, int]:
     else:
         code = 0
 
+    verify = None
+    if code == 0:
+        # The run ended with the source registered: the check runs last.
+        verify, code, check_error, check_help = _install_check(report)
+        if check_error is not None:
+            error_text, help_steps = check_error, check_help
+
     if code != 0 and report.source is not None:
         # Report the registration as the run left it.
         try:
@@ -351,12 +373,64 @@ def _install(command: dict) -> tuple[dict, int]:
             "features": None, "reducer": None, "cacheRatio": None}
         envelope["config"] = {"path": str(report.config_path), "state": report.config_state,
                               **summary}
+    envelope["verify"] = verify
     if error_text is not None:
         envelope["error"] = error_text
     if report.outcome == "installed":
         help_steps = ["sol-pi-axi setup <project dir>"]
     envelope.update(warnings=list(report.warnings), help=help_steps)
     return envelope, code
+
+
+def _install_check(report) -> tuple[dict | None, int, str | None, list[str]]:
+    """Run the check after a registering install run: its `verify` key (None when cancelled),
+    the exit code, and the error and help on failure. A failed check fails the run and leaves
+    the registration and the configuration as the run left them."""
+    from .check import run_check
+
+    try:
+        try:
+            _arm()
+            result = run_check(report.agent_dir)
+        finally:
+            _disarm()
+    except Cancelled as cancel:
+        report.outcome = "cancelled"
+        return None, 128 + cancel.signum, f"cancelled by {_signal_name(cancel.signum)}", []
+    report.warnings.extend(result.warnings)
+    if result.ok:
+        return result.verify(), 0, None, []
+    report.outcome = "failed"
+    return result.verify(), _EXIT_FAILED, result.error, list(result.help)
+
+
+def _verify() -> tuple[dict, int]:
+    from . import config
+    from .check import CheckResult, run_check
+
+    agent = config.agent_dir()
+    envelope: dict = {"verb": "verify", "ok": False, "version": __version__, "outcome": "failed",
+                      "context": {"agentDir": str(agent)}}
+    result = CheckResult()
+    try:
+        try:
+            _arm()
+            result = run_check(agent)
+        finally:
+            _disarm()
+    except Cancelled as cancel:
+        envelope.update(outcome="cancelled", verify=result.verify(),
+                        extension={"state": "absent"},
+                        error=f"cancelled by {_signal_name(cancel.signum)}", warnings=[], help=[])
+        return envelope, 128 + cancel.signum
+    extension = ({"state": "absent"} if result.source is None else
+                 {"state": "registered", "source": result.source})
+    envelope.update(ok=result.ok, outcome="verified" if result.ok else "failed",
+                    verify=result.verify(), extension=extension)
+    if result.error is not None:
+        envelope["error"] = result.error
+    envelope.update(warnings=list(result.warnings), help=[] if result.ok else list(result.help))
+    return envelope, 0 if result.ok else _EXIT_FAILED
 
 
 def _uninstall() -> tuple[dict, int]:
@@ -490,7 +564,7 @@ def _emit(envelope: dict, fmt: str, code: int) -> int:
 
 
 _KEY_ORDER = ("verb", "ok", "version", "outcome", "path", "extension", "removed", "config",
-              "context", "bin", "description", "project", "agentConfig", "error", "warnings",
+              "verify", "context", "bin", "description", "project", "agentConfig", "error", "warnings",
               "help")
 
 

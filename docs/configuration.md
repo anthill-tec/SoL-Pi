@@ -80,7 +80,7 @@ The configured ratio stays fixed for the loaded extension. The mechanism stores 
 
 ## Pi integration
 
-The extension reads no dedicated environment variables; the `sol-pi-axi` command reads `PI_CODING_AGENT_DIR` to find the agent directory. Evidence-Preserving Reducer resolves its configured reducer provider/model through `ExtensionContext.modelRegistry` and uses Pi-managed authentication. If the configured reducer model is unavailable or the nested model call fails, the original tool result continues unchanged.
+The extension reads one environment variable, `SOL_PI_AXI_VERIFY`, only to answer `sol-pi-axi verify` (it sends the load signal that check waits for); the `sol-pi-axi` command reads `PI_CODING_AGENT_DIR` to find the agent directory. Evidence-Preserving Reducer resolves its configured reducer provider/model through `ExtensionContext.modelRegistry` and uses Pi-managed authentication. If the configured reducer model is unavailable or the nested model call fails, the original tool result continues unchanged.
 
 SoL-Pi does not configure shell paths, command prefixes, storage paths, run IDs, provider URLs, reasoning levels, timeouts, or per-mechanism enable flags through environment variables. Apart from the EPR reducer provider/model route in `sol-pi.json`, model selection remains with Pi. Action Fusion uses Pi's built-in Bash execution, with `shellPath` and `shellCommandPrefix` inherited from Pi's file-backed settings at extension startup. Global settings apply everywhere; project settings override them only after project trust. Malformed settings stop initialization rather than silently selecting a different shell. Persistent artifacts are derived from Pi's session directory and session ID.
 
