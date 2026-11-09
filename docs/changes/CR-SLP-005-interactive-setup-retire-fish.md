@@ -143,7 +143,7 @@ output on its own pipe; a temporary project, agent directory and home; CR-SLP-00
 
 ## Estimated size
 
-8 points.
+13 points.
 
 ## Risks
 
