@@ -69,9 +69,11 @@ export function projectedEntryTokens(
 		// Dropped, rewritten, newly appended, or ambiguously duplicated messages
 		// provide no proven savings. Never fall back to their raw content size.
 		if (!sizes || sizes.length !== ids.length || (key.startsWith("tool:") && ids.length > 1)) continue;
-		for (let index = 0; index < ids.length; index++) {
-			const id = ids[index]!;
-			tokens.set(id, (tokens.get(id) ?? 0) + sizes[index]!);
+		for (const [index, id] of ids.entries()) {
+			// The length check above guarantees a size for every id.
+			const size = sizes[index];
+			if (size === undefined) continue;
+			tokens.set(id, (tokens.get(id) ?? 0) + size);
 		}
 	}
 	return tokens;

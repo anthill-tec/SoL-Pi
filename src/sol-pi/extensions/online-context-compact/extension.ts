@@ -469,8 +469,8 @@ export function createOnlineContextCompactExtension(options: OnlineContextCompac
 				const recoverableError = failure !== undefined && RECOVERABLE_COMPACTION_ERRORS.has(failure.message);
 				if (recoverableError) {
 					compactionRefused = true;
-					pi.appendEntry("sol-pi-online-context-compact-skipped", { reason: failure!.message });
-					if (context.mode === "tui") context.ui.notify(`Online compaction skipped: ${failure!.message}`, "warning");
+					pi.appendEntry("sol-pi-online-context-compact-skipped", { reason: failure.message });
+					if (context.mode === "tui") context.ui.notify(`Online compaction skipped: ${failure.message}`, "warning");
 				}
 
 				// The run was stopped for this compaction, so resume it unless the user cancelled.
