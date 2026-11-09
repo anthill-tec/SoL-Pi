@@ -15,7 +15,9 @@ The contract these tests fix for the implementation:
 - An empty answer is the prompt's default; it is handled by the prompt, not by these parsers.
 - `sol_pi_axi.config.enabled_model_suggestions(agent_dir) -> (suggestions, warnings)`: the
   `enabledModels` entries of `<agent_dir>/settings.json` that are valid `--reducer` values without
-  any of `*?[]{}` or a `:` suffix, in the file's order; it never raises. A missing or malformed
+  any of `*?[]{}` or a thinking-level suffix (`:` then one of Pi's levels `off`, `minimal`,
+  `low`, `medium`, `high`, `xhigh`, `max`), in the file's order — any other `:` is part of the
+  model id; it never raises. A missing or malformed
   file, a root that is not an object, a non-array `enabledModels`, or entries none of which is
   usable give no suggestions and one warning — naming the file for the first three, naming
   `enabledModels` for the last two."""
@@ -89,6 +91,21 @@ class EnabledModelSuggestionsTest(unittest.TestCase):
         suggestions, warnings = self.suggestions()
         self.assertEqual(suggestions, ["openai/gpt-5.1", "google/gemini-3-pro", "xai/grok-4"])
         self.assertIsInstance(warnings, list)
+
+    def test_a_colon_that_is_not_a_thinking_level_suffix_is_part_of_the_model_id(self):
+        self.tree.write_settings({"enabledModels": [
+            "x/y:high", "amazon-bedrock/anthropic.claude-v2:1", "x/y:off", "x/y:minimal",
+            "x/m-v1:0", "x/y:low", "x/y:medium", "x/y:xhigh", "x/y:max"]})
+        suggestions, warnings = self.suggestions()
+        self.assertEqual(suggestions, ["amazon-bedrock/anthropic.claude-v2:1", "x/m-v1:0"])
+        self.assertEqual(warnings, [])
+
+    def test_each_thinking_level_suffix_keeps_an_entry_out(self):
+        for level in ("off", "minimal", "low", "medium", "high", "xhigh", "max"):
+            with self.subTest(level=level):
+                self.tree.write_settings({"enabledModels": [f"x/y:{level}", "x/m-v1:0"]})
+                suggestions, _ = self.suggestions()
+                self.assertEqual(suggestions, ["x/m-v1:0"])
 
     def test_a_non_array_enabled_models_gives_no_suggestions_and_a_warning(self):
         self.tree.write_settings({"enabledModels": "openai/gpt-5.1"})

@@ -161,13 +161,22 @@ def pi_default_route(agent_directory: str | os.PathLike[str]) -> tuple[str, str]
     return provider, model
 
 
-#: The characters that keep an `enabledModels` entry out of the reducer suggestions: a glob
-#: character, or the `:` that starts a suffix.
-_UNSUGGESTED_CHARACTERS = frozenset("*?[]{}:")
+#: The glob characters that keep an `enabledModels` entry out of the reducer suggestions.
+_GLOB_CHARACTERS = frozenset("*?[]{}")
+#: Pi's thinking levels (`THINKING_LEVELS` in Pi's dist/core/virtual-models.js): an entry that
+#: ends with `:` and one of them carries a thinking-level suffix and is not suggested; any other
+#: `:` is part of the model id (`amazon-bedrock/anthropic.claude-v2:1`).
+_THINKING_LEVELS = frozenset({"off", "minimal", "low", "medium", "high", "xhigh", "max"})
+
+
+def _has_thinking_level_suffix(entry: str) -> bool:
+    _, colon, suffix = entry.rpartition(":")
+    return bool(colon) and suffix in _THINKING_LEVELS
 
 
 def _suggestable(entry) -> bool:
-    if not isinstance(entry, str) or any(char in _UNSUGGESTED_CHARACTERS for char in entry):
+    if (not isinstance(entry, str) or any(char in _GLOB_CHARACTERS for char in entry)
+            or _has_thinking_level_suffix(entry)):
         return False
     provider, slash, model = entry.partition("/")
     return bool(slash) and valid_route_part(provider) and valid_route_part(model)
@@ -177,7 +186,8 @@ def enabled_model_suggestions(
         agent_directory: str | os.PathLike[str]) -> tuple[list[str], list[str]]:
     """The reducer prompt's suggestions and their warnings: the `enabledModels` entries of
     `<agent dir>/settings.json` that are valid `--reducer` values without any of `*?[]{}` or a
-    `:` suffix, in the file's order. Never raises: a missing or malformed file, a root that is
+    thinking-level suffix (`:` then one of Pi's levels), in the file's order; any other `:` is
+    part of the model id. Never raises: a missing or malformed file, a root that is
     not an object, a non-array `enabledModels`, or entries none of which is usable give no
     suggestions and one warning."""
     path = Path(agent_directory) / "settings.json"
@@ -197,7 +207,7 @@ def enabled_model_suggestions(
     suggestions = [entry for entry in entries if _suggestable(entry)]
     if entries and not suggestions:
         return [], [(f"no reducer suggestions: no enabledModels entry in {path} is a provider "
-                     "and model without a glob character or a : suffix")]
+                     "and model without a glob character or a thinking-level suffix")]
     return suggestions, []
 
 

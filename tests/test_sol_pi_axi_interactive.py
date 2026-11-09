@@ -348,6 +348,16 @@ class SuggestionsTest(InteractiveTestCase):
                           values["evidencePreservingReducerModel"]),
                          ("google", "gemini-3-pro"))
 
+    def test_the_reducer_prompt_lists_a_model_id_with_a_colon(self):
+        colon_id = "amazon-bedrock/anthropic.claude-v2:1"
+        self.tree.write_settings({"defaultProvider": PI_PROVIDER, "defaultModel": PI_MODEL,
+                                  "enabledModels": [colon_id, "x/y:xhigh"]})
+        result, shown = self.run_to_the_end()
+        self.assert_code(result, 0)
+        before_route = shown[shown.index(switch("onlineContextCompact")):]
+        self.assertIn(colon_id, before_route, "suggested before the reducer prompt")
+        self.assertNotIn("x/y:xhigh", result.terminal, "a thinking-level suffix is not suggested")
+
     def test_a_non_array_enabled_models_gives_no_suggestions_and_a_warning(self):
         self.tree.write_settings({"defaultProvider": PI_PROVIDER, "defaultModel": PI_MODEL,
                                   "enabledModels": "openai/gpt-5.1"})
