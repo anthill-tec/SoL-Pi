@@ -134,8 +134,9 @@ output on its own pipe; a temporary project, agent directory and home; CR-SLP-00
       `sol-pi.json`: `extension` reports it registered.
 - [ ] **§S2** `git grep -n -E 'setup-sol-pi|query-pi-models|drive-pty' -- . ':!docs'
       ':!CHANGELOG.md'` returns nothing; the five files are gone.
-- [ ] **§S2** The Bun suite's passed-plus-skipped count falls by exactly 6, the cases of
-      `tests/setup-prompt-flow.test.ts`; no other test changes name or status.
+- [ ] **§S2** Apart from the Bun cases this CR adds, the Bun suite's passed-plus-skipped count
+      falls by exactly 6, the cases of `tests/setup-prompt-flow.test.ts`; no other existing test
+      changes name or status.
 - [ ] **§S3** `tests/install-guide.test.ts` checks §S3's items in README, `agents-install.md` and
       `CONTRIBUTING.md`, and that neither README nor `agents-install.md` says `setup` never prompts;
       `CHANGELOG.md` `[Unreleased]` has DN §D7's mapping and names `setup-sol-pi.fish` only in it.
