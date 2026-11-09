@@ -124,6 +124,11 @@ class InteractiveTestCase(PiCommandTestCase):
 
     def assert_no_prompt(self, text: str) -> None:
         for marker in prompt_markers():
+            if marker == ROUTE:
+                # Only a prompt line starts with it: envelope text names `--reducer <provider>/<model>`.
+                self.assertNotRegex(text, rf"(?m)^{re.escape(ROUTE)}",
+                                    f"a prompt was written:\n{text}")
+                continue
             self.assertNotIn(marker, text, f"a prompt was written:\n{text}")
 
     def assert_stdout_is_only_the_envelope(self, result) -> dict:

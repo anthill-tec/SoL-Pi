@@ -6,7 +6,7 @@ the setup defaults; and remove every SoL-Pi source again.
 Each run fills in a report as it goes, so a failure or a cancel reports the state it left."""
 
 import os
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -60,14 +60,16 @@ def _settings_path(agent_dir: Path) -> Path:
 
 
 def _resolve_config(report: InstallReport, *, features: Iterable[str] | None,
-                    reducer: tuple[str, str] | None, cache_ratio: float | None) -> dict | None:
+                    reducer: tuple[str, str] | None, cache_ratio: float | None,
+                    route_optional: bool = False) -> dict | None:
     """The values to write when the agent file is absent, else None (the file is kept; an invalid
-    one and any value flag are named in `warnings`)."""
+    one and any value flag are named in `warnings`). `route_optional` leaves a missing reducer
+    route None for the prompts."""
     path = report.agent_dir / "sol-pi.json"
     report.config_path = path
     if not os.path.lexists(path):
         return default_values(report.agent_dir, features=features, reducer=reducer,
-                              cache_ratio=cache_ratio)
+                              cache_ratio=cache_ratio, route_optional=route_optional)
     report.config_state = "kept"
     try:
         report.config_values = read_config(path)
@@ -82,16 +84,25 @@ def _resolve_config(report: InstallReport, *, features: Iterable[str] | None,
 
 def run_install(report: InstallReport, *, version: str, features: Iterable[str] | None = None,
                 reducer: tuple[str, str] | None = None, cache_ratio: float | None = None,
-                on_rename: RenameHook | None = None) -> None:
+                on_rename: RenameHook | None = None, ask: Callable[[dict], dict] | None = None,
+                unprompted_warning: str | None = None) -> None:
     """Register `npm:@anthill-tec/sol-pi@<version>` and write an absent agent file, filling in
     `report`. In order: the source, the configuration (no `pi` command runs before both are
     resolved), `pi --version`, `pi install` unless Pi already records exactly the source, Pi's
     record read again, `pi remove` for every other SoL-Pi source, then the agent file. Raises
-    `PiError` or `ConfigError`; a failure before `pi install` changes nothing."""
+    `PiError` or `ConfigError`; a failure before `pi install` changes nothing.
+
+    Only when the run writes the agent file: `ask` (the `--interactive` prompts and
+    confirmation) turns the values into the confirmed ones after Pi's record is read and before
+    `pi install` or `pi remove`, a missing reducer route left None for it; else
+    `unprompted_warning` (why `--interactive` did not prompt) is added to the warnings."""
     agent = report.agent_dir
     source = release_source(version)
     report.source = source
-    values = _resolve_config(report, features=features, reducer=reducer, cache_ratio=cache_ratio)
+    values = _resolve_config(report, features=features, reducer=reducer, cache_ratio=cache_ratio,
+                             route_optional=ask is not None)
+    if values is not None and ask is None and unprompted_warning is not None:
+        report.warnings.append(unprompted_warning)
 
     pi = Pi(find_pi())
     report.pi_version = pi.version()
@@ -101,6 +112,8 @@ def run_install(report: InstallReport, *, version: str, features: Iterable[str] 
 
     recorded = recorded_sources(agent)
     earlier = [entry for entry in recorded if entry != source and is_sol_pi(entry, agent)]
+    if values is not None and ask is not None:
+        values = ask(values)
     changed = False
     if source in recorded:
         report.registered = True
