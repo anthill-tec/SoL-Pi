@@ -7,6 +7,11 @@
 # Tooling debris.
 __pycache__/
 test-reports/
+# coverage.py data (a parallel run's per-process parts too) and its lcov, when a run reports
+# at the project root rather than into test-reports/<agent>/.
+.coverage
+.coverage.*
+coverage.lcov
 
 # Project registry (holds the Crucible project key) — machine-local, never committed.
 .env

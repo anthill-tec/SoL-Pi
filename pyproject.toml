@@ -37,3 +37,12 @@ venv = ".venv"
 pythonVersion = "3.14"
 include = ["sol_pi_axi", "tests"]
 exclude = ["**/node_modules", "**/__pycache__", ".venv", ".worktrees", "test-reports", "examples"]
+
+# The CLI tests run `sol-pi-axi` (and the Pi stubs) as subprocesses. `patch = ["subprocess"]`
+# hands every Python child the run's configuration (COVERAGE_PROCESS_CONFIG, which
+# tests/sol_pi_axi_support.cli_environ forwards) so it measures itself; that implies
+# `parallel`, and each process writes `<data-file>.<host>.<pid>.<random>` beside the run's
+# data file. Reporting (`coverage lcov`/`report`) combines them and deletes the parts.
+[tool.coverage.run]
+patch = ["subprocess"]
+parallel = true

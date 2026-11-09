@@ -296,6 +296,8 @@ class NoNodeOrPiCodeTest(unittest.TestCase):
             "print(run_setup(sys.argv[1], agent_dir=sys.argv[2]).outcome)\n"
         )
         environ = {"PATH": str(fake_bin), "HOME": str(tree.home), "PI_CODING_AGENT_DIR": str(tree.agent)}
+        # Coverage's own variables, so a measured run measures this child too (see cli_environ).
+        environ.update({key: value for key, value in os.environ.items() if key.startswith("COVERAGE")})
         result = subprocess.run([sys.executable, "-c", program, str(tree.project), str(tree.agent)],
                                 cwd=REPO, env=environ, capture_output=True, text=True, timeout=60,
                                 check=False)
