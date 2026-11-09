@@ -24,7 +24,8 @@ All notable changes to this project are documented in this file. The format is b
   `sol-pi.json` with the setup defaults when it has none; `sol-pi-axi uninstall` removes every
   SoL-Pi source and deletes no configuration file. The home view shows the extension's
   registration. The release workflow tests both stacks and publishes both packages.
-- `sol-pi-axi verify` checks that Pi loads SoL-Pi, registering nothing and writing no file:
+- `sol-pi-axi verify` checks that Pi loads SoL-Pi, registering nothing and writing no SoL-Pi file
+  (Pi may create `auth.json` and `models-store.json` in the agent directory):
   exactly one SoL-Pi source registered with its package on disk, then one
   `pi --offline --no-approve --mode rpc --no-session` start from home, bounded at 30 seconds, that
   must show SoL-Pi's load signal, answer `get_state` and report no SoL-Pi `extension_error`.
