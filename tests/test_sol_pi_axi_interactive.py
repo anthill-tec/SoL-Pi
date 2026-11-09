@@ -34,6 +34,7 @@ The contract these tests fix for the implementation (the prompt module is
 import json
 import os
 import re
+import shlex
 import signal
 import subprocess
 import time
@@ -810,6 +811,73 @@ class InstallCancelTest(InteractiveTestCase):
         self.assert_cancelled(run, 130, "SIGINT", config=NOTHING_SHOWN, registered=True,
                               before=before)
         self.assertFalse(self.tree.agent_file.exists())
+
+
+class RerunCommandTest(InteractiveTestCase):
+    """§S1: the `cancelled` envelope's command to run again carries over every value flag given,
+    in `--features`, `--reducer`, `--cache-ratio`, `--format` order whatever order they were
+    given in, each value shell-quoted, then `--interactive`; a flag not given stays absent."""
+
+    #: A route `--reducer` accepts (no whitespace) that the shell must have quoted.
+    ODD_REDUCER = "pro'v/m$od;x"
+
+    def setUp(self):
+        super().setUp()
+        self.with_pi_default()
+
+    def cancelled_help(self, *args, fmt: str = "toon") -> list:
+        run = self.start(*args)
+        run.expect(switch("actionFusion"))
+        run.expect(": ")
+        run.ctrl_c()
+        result = self.finish(run)
+        self.assert_code(result, 130)
+        if fmt == "json":
+            self.assert_no_prompt(result.stdout)
+            envelope = json.loads(result.stdout)["axi"]
+        else:
+            envelope = self.assert_stdout_is_only_the_envelope(result)
+        self.assertEqual(envelope["outcome"], "cancelled")
+        return envelope["help"]
+
+    def test_setup_without_value_flags_runs_the_same_command_again(self):
+        self.assertEqual(self.cancelled_help("setup", self.tree.project, "--interactive"),
+                         [f"sol-pi-axi setup {shlex.quote(str(self.tree.project))} --interactive"])
+
+    def test_setup_carries_over_every_value_flag_quoted_in_a_stable_order(self):
+        help_steps = self.cancelled_help("setup", self.tree.project, "--cache-ratio", "4.5",
+                                         "--interactive", f"--reducer={self.ODD_REDUCER}",
+                                         "--features", "observationPack,evidencePreservingReducer")
+        self.assertEqual(help_steps, [
+            f"sol-pi-axi setup {shlex.quote(str(self.tree.project))} "
+            "--features observationPack,evidencePreservingReducer "
+            f"--reducer {shlex.quote(self.ODD_REDUCER)} --cache-ratio 4.5 --interactive"])
+        self.assertIn("--reducer 'pro'\"'\"'v/m$od;x'", help_steps[0])
+
+    def test_setup_in_a_directory_needing_quotes_keeps_it_quoted_before_the_flags(self):
+        project = self.tree.root / "my proj's"
+        project.mkdir()
+        help_steps = self.cancelled_help("setup", project, "--interactive", "--reducer",
+                                         "prov/mod-1")
+        self.assertEqual(help_steps, [f"sol-pi-axi setup {shlex.quote(str(project))} "
+                                      "--reducer prov/mod-1 --interactive"])
+
+    def test_install_without_value_flags_runs_the_same_command_again(self):
+        self.assertEqual(self.cancelled_help("install", "--interactive"),
+                         ["sol-pi-axi install --interactive"])
+
+    def test_install_carries_over_every_value_flag_quoted_in_a_stable_order(self):
+        help_steps = self.cancelled_help("install", "--format=json", "--interactive",
+                                         "--cache-ratio", "3", "--reducer", self.ODD_REDUCER,
+                                         "--features", "none", fmt="json")
+        self.assertEqual(help_steps, [
+            f"sol-pi-axi install --features none --reducer {shlex.quote(self.ODD_REDUCER)} "
+            "--cache-ratio 3 --format json --interactive"])
+
+    def test_install_with_some_value_flags_names_only_those(self):
+        help_steps = self.cancelled_help("install", "--interactive", "--features", "actionFusion")
+        self.assertEqual(help_steps, ["sol-pi-axi install --features actionFusion --interactive"])
+        self.assertNotIn("--non-interactive", help_steps[0])
 
 
 class InstallAfterConfirmationTest(InteractiveTestCase):
