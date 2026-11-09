@@ -51,6 +51,7 @@ from tests.sol_pi_axi_support import (
     decode_envelope,
     import_sut,
     snapshot,
+    venv_script,
 )
 
 EXIT_CODES = {signal.SIGINT: 130, signal.SIGTERM: 143, signal.SIGHUP: 129}
@@ -90,6 +91,36 @@ def process_alive(pid: int | None) -> bool:
     return os.path.exists(f"/proc/{pid}")
 
 
+def process_gone(pid: int | None, within: float = 5.0) -> bool:
+    """Whether the process `pid` is gone, or a zombie no longer running, within `within` seconds:
+    a process another parent reaps (a grandchild handed to init once its parent died) may stay in
+    the process table a moment after it was killed. A missing pid fails the caller's assertion."""
+    if pid is None:
+        raise AssertionError("the stub pi started no process to look for")
+    deadline = time.monotonic() + within
+    while True:
+        try:
+            stat = Path(f"/proc/{pid}/stat").read_text(encoding="utf-8")
+        except OSError:
+            return True
+        if stat.rsplit(")", 1)[-1].split()[0] == "Z":
+            return True
+        if time.monotonic() >= deadline:
+            return False
+        time.sleep(0.05)
+
+
+def wait_for(probe, within: float = 20.0):
+    """`probe()`'s first non-None value within `within` seconds, else None."""
+    deadline = time.monotonic() + within
+    while time.monotonic() < deadline:
+        value = probe()
+        if value is not None:
+            return value
+        time.sleep(0.05)
+    return None
+
+
 def kill_quietly(pid: int | None) -> None:
     if pid is None:
         return
@@ -120,6 +151,7 @@ class VerifyTestCase(PiCommandTestCase):
     def setUp(self):
         super().setUp()
         self.addCleanup(lambda: kill_quietly(self.pi.rpc_pid()))
+        self.addCleanup(lambda: kill_quietly(self.pi.rpc_grandchild_pid()))
 
     @property
     def package_dir(self) -> Path:
@@ -345,8 +377,9 @@ class VerifyBoundTest(VerifyTestCase):
         self.assertEqual(default, 30)
 
     def test_a_start_that_never_answers_fails_after_the_bound_with_no_pi_process_left(self):
+        """Pi and the process it started are both killed: the stub's `sleep` grandchild too."""
         self.register_npm()
-        self.pi.configure(rpc={"hang": True})
+        self.pi.configure(rpc={"hang": True, "grandchild": True})
         started = time.monotonic()
         result = self.run_check(1.0)
         elapsed = time.monotonic() - started
@@ -359,6 +392,8 @@ class VerifyBoundTest(VerifyTestCase):
         pid = self.pi.rpc_pid()
         self.assertIsNotNone(pid, "the stub pi never started in rpc mode")
         self.assertFalse(process_alive(pid), "the pi process was not killed and reaped")
+        self.assertTrue(process_gone(self.pi.rpc_grandchild_pid()),
+                        "the process pi started outlived the bound")
 
     def test_a_confirm_dialog_names_its_method_and_title_and_that_pi_does_not_name_the_extension(self):
         self.register_npm()
@@ -421,6 +456,67 @@ class VerifyUsageTest(VerifyTestCase):
                 self.assertEqual((envelope["verb"], envelope["ok"], envelope["outcome"]),
                                  ("verify", False, "cancelled"))
                 self.assertEqual(self.pi.rpc_calls(), [])
+
+
+class SignalWhilePiRunsTest(VerifyTestCase):
+    """§S3/§S4: SIGINT, SIGTERM or SIGHUP arriving while Pi runs the check cancels the run with
+    130/143/129 and leaves neither Pi nor a process it started."""
+
+    def signal_while_pi_runs(self, verb: str, signum: int):
+        """Run `sol-pi-axi <verb>` with the stub hanging after starting its `sleep` grandchild;
+        once the grandchild runs, send the command `signum`. Returns the finished run."""
+        for path in (self.pi.pid_file, self.pi.grandchild_file):
+            path.unlink(missing_ok=True)
+        process = subprocess.Popen([str(venv_script()), verb], cwd=self.tree.project,
+                                   env=self.environ(), stdin=subprocess.DEVNULL,
+                                   stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        try:
+            grandchild = wait_for(self.pi.rpc_grandchild_pid)
+            if grandchild is None:
+                process.kill()
+                stdout, stderr = process.communicate()
+                self.fail(f"pi never started its process:\n{stdout}\n{stderr}")
+            process.send_signal(signum)
+            stdout, stderr = process.communicate(timeout=20)
+        finally:
+            if process.poll() is None:
+                process.kill()
+                process.communicate()
+        result = subprocess.CompletedProcess(process.args, process.returncode, stdout, stderr)
+        assert_clean_streams(self, result)
+        self.assertFalse(process_alive(self.pi.rpc_pid()), "the pi process outlived the cancel")
+        self.assertTrue(process_gone(grandchild), "the process pi started outlived the cancel")
+        return result
+
+    def test_each_signal_while_pi_runs_cancels_verify_and_leaves_no_pi_process(self):
+        self.register_npm()
+        self.pi.configure(rpc={"hang": True, "grandchild": True})
+        for signum, code in EXIT_CODES.items():
+            with self.subTest(signal=signum.name):
+                result = self.signal_while_pi_runs("verify", signum)
+                self.assert_exit(result, code)
+                envelope = decode_envelope(self, result.stdout)
+                self.assertEqual((envelope["verb"], envelope["ok"], envelope["outcome"]),
+                                 ("verify", False, "cancelled"))
+                self.assertEqual(envelope["error"], f"cancelled by {signum.name}")
+                self.assertEqual(envelope["verify"], {"ok": False, "loaded": False, "exit": None,
+                                                      "errors": []})
+
+    def test_each_signal_during_installs_check_cancels_it_and_leaves_no_pi_process(self):
+        self.with_pi_default()
+        self.pi.configure(rpc={"hang": True, "grandchild": True})
+        for signum, code in EXIT_CODES.items():
+            with self.subTest(signal=signum.name):
+                result = self.signal_while_pi_runs("install", signum)
+                self.assert_exit(result, code)
+                envelope = decode_envelope(self, result.stdout)
+                self.assertEqual((envelope["verb"], envelope["ok"], envelope["outcome"]),
+                                 ("install", False, "cancelled"))
+                self.assertEqual(envelope["error"], f"cancelled by {signum.name}")
+                self.assertIn("verify", envelope)
+                self.assertIsNone(envelope["verify"])
+                self.assertEqual(envelope["extension"]["registered"], True)
+                self.assertEqual(self.packages(), [self.own_source()])
 
 
 # --- install runs the check (stub) --------------------------------------------------------------

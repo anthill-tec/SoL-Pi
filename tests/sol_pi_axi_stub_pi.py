@@ -26,7 +26,9 @@ invocation (its arguments and working directory) and edits `settings.json` as Pi
   `exit` (default 0; a non-zero `exit` prints nothing on standard output, as a Pi that failed to
   load an extension). `hang` never answers and never exits; `dialog` (`{method, title}`) prints
   a dialog `extension_ui_request` and then never answers or exits, as Pi blocked in
-  `session_start`.
+  `session_start`. `grandchild` first starts a sleeping process (the stub's interpreter, as
+  `PATH` holds only the stub; standard streams on `/dev/null`, so only a kill reaches it) and writes its process id to
+  `<directory>-rpc-grandchild.pid`, as a Pi that started a process of its own.
 - `install <npm source>` also creates the package's directory under
   `<agent dir>/npm/node_modules/<name>` with a `package.json` (an existing one, or a symbolic
   link standing in for the package, is left alone), as Pi's npm install does.
@@ -95,6 +97,15 @@ if "--mode" in argv:
     def forever():
         while True:
             time.sleep(3600)
+
+    if rpc.get("grandchild"):
+        import subprocess
+        child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(3600)"],
+                                 stdin=subprocess.DEVNULL,
+                                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        grandchild_file = LOG[:-len("-calls.jsonl")] + "-rpc-grandchild.pid"
+        Path(grandchild_file + ".tmp").write_text(str(child.pid), encoding="utf-8")
+        os.replace(grandchild_file + ".tmp", grandchild_file)
 
     if rpc.get("exit"):
         if rpc.get("stderr"):
@@ -245,6 +256,7 @@ class StubPi:
         self.log = Path(root) / f"{directory}-calls.jsonl"
         self.pid_file = Path(root) / f"{directory}-rpc.pid"
         self.stdin_log = Path(root) / f"{directory}-rpc-stdin.jsonl"
+        self.grandchild_file = Path(root) / f"{directory}-rpc-grandchild.pid"
         self.path.write_text(
             f"#!{sys.executable}\n"
             + _STUB_PROGRAM.format(control=repr(str(self.control_file)), log=repr(str(self.log))),
@@ -256,7 +268,7 @@ class StubPi:
                   settings_dir: Path | None = None, rpc: dict | None = None) -> None:
         """`rpc` controls a `--mode rpc` start (see the module docstring): `notify` (`own`,
         `previous`, `none`), `junk`, `extension_errors`, `respond`, `hang`, `dialog`, `exit`,
-        `stderr`."""
+        `stderr`, `grandchild`."""
         self.control_file.write_text(json.dumps({
             "version": version, "install_exit": install_exit, "remove_exit": remove_exit,
             "settings_dir": str(settings_dir) if settings_dir is not None else None,
@@ -279,6 +291,12 @@ class StubPi:
         if not self.pid_file.exists():
             return None
         return int(self.pid_file.read_text(encoding="utf-8"))
+
+    def rpc_grandchild_pid(self) -> int | None:
+        """The process id of the `sleep` the last `grandchild` start began, None when none."""
+        if not self.grandchild_file.exists():
+            return None
+        return int(self.grandchild_file.read_text(encoding="utf-8"))
 
     def calls(self) -> list[dict]:
         """Every recorded invocation, in order: `{"argv": [...], "cwd": "...",
