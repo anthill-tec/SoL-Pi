@@ -324,11 +324,9 @@ export function createOnlineContextCompactExtension(options: OnlineContextCompac
 				keepRecentTokens,
 				observedMessages,
 			);
-			const contextWindowTokens = validPositiveInteger(usage?.contextWindow)
-				? usage.contextWindow
-				: validPositiveInteger(context.model?.contextWindow)
-					? context.model.contextWindow
-					: null;
+			let contextWindowTokens: number | null = null;
+			if (validPositiveInteger(usage?.contextWindow)) contextWindowTokens = usage.contextWindow;
+			else if (validPositiveInteger(context.model?.contextWindow)) contextWindowTokens = context.model.contextWindow;
 			const averageContextTokenIncrement =
 				state.positiveContextDeltaCount === 0
 					? null

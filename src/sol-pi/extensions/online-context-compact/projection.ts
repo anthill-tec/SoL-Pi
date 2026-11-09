@@ -128,9 +128,10 @@ export function estimateProjectedCompactionTokens(
 		? sizes.get(entry.sourceEntry.id) ?? 0
 		: removable(entry).reduce((sum, message) => sum + estimateTokens(message), 0)), 0);
 	const previousEntry = projected[previous];
-	const previousTokens = previousEntry ? (sizes
+	if (!previousEntry) return prefixTokens;
+	const previousTokens = sizes
 		? sizes.get(previousEntry.sourceEntry.id) ?? 0
 		: previousEntry.messages.filter((message) => message.role === "compactionSummary")
-			.reduce((sum, message) => sum + estimateTokens(message), 0)) : 0;
+			.reduce((sum, message) => sum + estimateTokens(message), 0);
 	return prefixTokens + previousTokens;
 }
