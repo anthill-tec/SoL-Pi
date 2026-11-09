@@ -232,7 +232,8 @@ def _parse(args: list[str]) -> dict:
         raise UsageError(f"--format must be toon or json, got {flags['--format']!r}")
     command = {"verb": verb, "project": positionals[1] if verb == "setup" else None,
                "features": None, "reducer": None, "cache_ratio": None,
-               "interactive": "--interactive" in flags}
+               "interactive": "--interactive" in flags,
+               "value_flags": {name: flags[name] for name in _VALUE_FLAGS if name in flags}}
     if "--features" in flags:
         command["features"] = _parse_features(flags["--features"])
     if "--reducer" in flags:
@@ -313,7 +314,7 @@ def _setup(command: dict) -> tuple[dict, int]:
             _disarm()
     except (Cancelled, PromptCancel) as cancel:
         cause, code = _cancel_cause(cancel)
-        rerun = ([f"sol-pi-axi setup {_quote(project)} --interactive"]
+        rerun = ([_rerun(command, f"sol-pi-axi setup {_quote(project)}")]
                  if session is not None else [])
         shown = (session.shown if session is not None and not session.confirmed
                  and any(value is not None for value in session.shown.values()) else None)
@@ -409,7 +410,7 @@ def _install(command: dict) -> tuple[dict, int]:
         error_text, code = _cancel_cause(cancel)
         if session is not None and session.started and not session.confirmed:
             error_text = f"{error_text}; nothing was registered or written"
-            help_steps = ["sol-pi-axi install --interactive"]
+            help_steps = [_rerun(command, "sol-pi-axi install")]
     except PiError as error:
         error_text, help_steps = str(error), error.help
     except config.ConfigError as error:
@@ -686,6 +687,14 @@ def _summary(values: dict) -> dict:
             "reducer": (f"{values['evidencePreservingReducerProvider']}/"
                         f"{values['evidencePreservingReducerModel']}"),
             "cacheRatio": ratio}
+
+
+def _rerun(command: dict, base: str) -> str:
+    """The command to run a cancelled `--interactive` run again: `base`, then every value flag
+    the run was given, in `_VALUE_FLAGS` order, each value shell-quoted, then `--interactive`."""
+    given = command.get("value_flags") or {}
+    flags = [f"{name} {_quote(given[name])}" for name in _VALUE_FLAGS if name in given]
+    return " ".join([base, *flags, "--interactive"])
 
 
 def _fix_help(project: str, flag: str | None) -> list[str]:
