@@ -38,7 +38,8 @@ through `tests/fixtures/drive-pty.py`, and is replaced by `sol-pi-axi` (DN §D7)
   Defaults are the verb's resolved values after any value flags. An answer outside the matching
   flag's grammar repeats the prompt with the rule. The reducer prompt suggests the agent
   `settings.json` `enabledModels` entries that are valid `--reducer` values without `*?[]{}` or a
-  `:` suffix. `settings.json` fails the run only where the run without `--interactive` would read
+  thinking-level suffix (`:` then one of Pi's levels `off`, `minimal`, `low`, `medium`, `high`,
+  `xhigh`, `max`); any other `:` is part of the model id. `settings.json` fails the run only where the run without `--interactive` would read
   it (CR-SLP-004 §S2); otherwise a missing or malformed file, a non-array `enabledModels`, or
   unusable entries give no suggestions and a warning.
 - An empty reducer answer with no default: exit 1, `failed`, `--reducer` in `help[]`, nothing
@@ -55,11 +56,11 @@ through `tests/fixtures/drive-pty.py`, and is replaced by `sol-pi-axi` (DN §D7)
   its load check last as without `--interactive`.
 - `cancelled` envelope before the confirmation: `ok: false`, `outcome: cancelled`, `error` naming
   the cause, `help[]` with the command to run again.
-  - `setup`: `path` the target file, `config` the values shown so far (`null` before the first
-    answer).
+  - `setup`: `path` the target file, `config` the values shown so far (`null` until every
+    mechanism's on/off prompt is answered).
   - `install`: `config` in CR-SLP-007's shape with `path` the target file, `state` `null`, and
-    `features`, `reducer`, `cacheRatio` the values shown so far (each `null` before the first
-    answer); `extension` reports the registration as the run left it (unchanged before the
+    `features`, `reducer`, `cacheRatio` the values shown so far (`features` `null` until every
+    mechanism's on/off prompt is answered, each other `null` until answered); `extension` reports the registration as the run left it (unchanged before the
     confirmation); `verify` `null`.
 - `--help` and the `--yes` hint no longer say the command never prompts: they name `--interactive`,
   and the hint still points to `--non-interactive` as the switch for a caller's `--yes`.
@@ -109,7 +110,8 @@ output on its own pipe; a temporary project, agent directory and home; CR-SLP-00
       written; an empty answer exits 1, `failed`, `--reducer` in `help[]`, and no `pi install` or
       `pi remove` has run.
 - [ ] **§S1** The reducer prompt lists usable `enabledModels` entries, none with a glob character
-      or `:` suffix; a non-array `enabledModels` or non-string entries give no suggestions and a
+      or a thinking-level suffix, and an entry such as `amazon-bedrock/anthropic.claude-v2:1`
+      among them; a non-array `enabledModels` or non-string entries give no suggestions and a
       warning.
 - [ ] **§S1** An invalid project file, a malformed `settings.json` where the run without
       `--interactive` reads it, and (for `install`) no `pi` fail before any prompt; a malformed
