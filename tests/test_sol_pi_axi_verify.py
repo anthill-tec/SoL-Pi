@@ -368,6 +368,14 @@ class VerifyBeforeStartTest(VerifyTestCase):
         envelope = self.assert_failed_before_start(self.sol("verify"))
         self.assertIn(str(self.package_dir), envelope["error"])
 
+    def test_a_missing_home_is_named_as_pis_working_directory(self):
+        self.register_npm()
+        home = self.tree.root / "no-such-home"
+        envelope = self.assert_failed_before_start(self.sol("verify", env=self.environ(HOME=str(home))))
+        self.assertIn(str(home), envelope["error"])
+        self.assertIn("working directory", envelope["error"])
+        self.assertNotIn("cannot run", envelope["error"])
+
 
 class VerifyBoundTest(VerifyTestCase):
     """§S2's bound, through `sol_pi_axi.check.run_check` with a short `timeout`."""

@@ -122,13 +122,19 @@ def _start(executable: str, package_dir: Path, result: CheckResult, timeout: flo
     """Start Pi once in RPC mode and read its answer into `result` (`error` set on failure)."""
     value = secrets.token_hex(12)
     environ = {**os.environ, VERIFY_ENV: value}
+    home = Path.home()
     try:
         process = subprocess.Popen(
-            [executable, *_RPC_COMMAND.split()], cwd=Path.home(), env=environ,
+            [executable, *_RPC_COMMAND.split()], cwd=home, env=environ,
             stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
             errors="replace", start_new_session=True)
     except OSError as error:
-        result.error = f"cannot run {executable}: {error.strerror or error}"
+        if error.filename is not None and os.fspath(error.filename) == os.fspath(home):
+            # The child could not enter its working directory: the home, not Pi, is missing.
+            result.error = (f"cannot start pi from the home directory {home}, Pi's working "
+                            f"directory: {error.strerror or error}")
+        else:
+            result.error = f"cannot run {executable}: {error.strerror or error}"
         return
     killed = False
     try:
