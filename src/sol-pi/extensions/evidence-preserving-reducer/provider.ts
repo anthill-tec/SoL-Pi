@@ -112,6 +112,11 @@ export async function callReducer(
 	context: ExtensionContext,
 	compatComplete: CompatComplete = completeCompat,
 ): Promise<ProviderResult> {
+	// SAFETY: CompatibleModelRegistry describes the registry surface across the Pi
+	// versions SoL-Pi supports, which the installed ModelRegistry type cannot express:
+	// `complete` exists only on newer Pi and is optional, and every optional member is
+	// presence-checked before use. The auth result type is the readonly union of the
+	// shapes those versions return.
 	const registry = context.modelRegistry as unknown as CompatibleModelRegistry;
 	const model = resolveReducerModel(config, registry);
 	const operation = operationSignal(context.signal, config.timeoutMs);

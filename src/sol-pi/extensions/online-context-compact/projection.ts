@@ -13,6 +13,9 @@ type ProjectionApi = {
 
 /** Pi 1.0 applies context edits before choosing a cut; older Pi uses raw messages. */
 function contextEntries(entries: readonly SessionEntry[]): readonly ProjectedEntry[] {
+	// SAFETY: the Pi resolved at runtime may predate `buildSessionProjection`, even
+	// though the installed type declares it. ProjectionApi marks it optional so the
+	// presence check below is honoured; older Pi takes the raw-message fallback.
 	const buildProjection = (pi as unknown as ProjectionApi).buildSessionProjection;
 	if (buildProjection) return buildProjection([...entries]).entries;
 	const lastCompaction = entries.findLastIndex((entry) => entry.type === "compaction");
