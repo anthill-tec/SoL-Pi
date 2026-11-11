@@ -17,8 +17,8 @@ All notable changes to this project are documented in this file. The format is b
 
 ### Added
 
-- `sol-pi-axi`, an installed agent-facing command (Python 3.14+, `uv tool install
-  sol-pi-axi==<version>`). `sol-pi-axi setup <project dir>` writes
+- `sol-pi-axi`, an installed agent-facing command (Python 3.14+, installed with uv).
+  `sol-pi-axi setup <project dir>` writes
   `<project dir>/.pi/sol-pi.json` from the project file, the agent directory's `sol-pi.json` or the
   setup defaults (all four mechanisms on, ratio 12.5, the reducer on Pi's default provider and
   model), overridden by `--features`, `--reducer` and `--cache-ratio`; it prompts only with
