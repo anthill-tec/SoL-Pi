@@ -444,16 +444,40 @@ class UsageErrorTest(CliTestCase):
         # JavaScript's WhiteSpace and LineTerminator code points, and Python-only whitespace.
         whitespace = ("\t\n\v\f\r \u00a0\u1680\u2000\u2005\u200a\u2028\u2029\u202f\u205f\u3000"
                       "\ufeff\x1c\x1d\x1e\x1f\x85")
+        # One character per class goes through the `sol-pi-axi` process: a JavaScript WhiteSpace
+        # character Python does not count as whitespace, a LineTerminator, a Python-only one.
+        per_class = {"JavaScript WhiteSpace": "\ufeff", "LineTerminator": "\u2028",
+                     "Python-only whitespace": "\x85"}
+
+        def positions(char):
+            """The three positions: leading the provider, trailing the model, inside the provider,
+            each as `(provider, model, the side carrying the character)`."""
+            return ((char + "p", "m", "provider"), ("p", "m" + char, "model"),
+                    ("p" + char + "q", "m", "provider"))
+
         config = import_sut("sol_pi_axi.config")
-        self.with_pi_default()
+        self.assertLessEqual(set(per_class.values()), set(whitespace))
+        # In process: every character at every position, against `--reducer`'s check of each side
+        # of its `/` and against Pi's default route (the premise).
         for char in whitespace:
-            for provider, model in ((char + "p", "m"), ("p", "m" + char), ("p" + char + "q", "m")):
+            for provider, model, side in positions(char):
                 with self.subTest(char=hex(ord(char)), provider=provider, model=model):
+                    self.assertIs(config.valid_route_part(provider), side != "provider",
+                                  "--reducer's check rejects the side carrying whitespace only")
+                    self.assertIs(config.valid_route_part(model), side != "model",
+                                  "--reducer's check rejects the side carrying whitespace only")
                     self.tree.write_settings({"defaultProvider": provider, "defaultModel": model})
                     self.assertIsNone(config.pi_default_route(self.tree.agent),
                                       "the premise: Pi's default route rejects it")
-                    self.assert_usage(["setup", self.tree.project, "--reducer",
-                                       f"{provider}/{model}"], "--reducer")
+        # Through the command: one character per class at each position, 9 processes.
+        self.with_pi_default()
+        runs = [(label, char, provider, model) for label, char in per_class.items()
+                for provider, model, _ in positions(char)]
+        self.assertEqual(len(runs), 9)
+        for label, char, provider, model in runs:
+            with self.subTest(cls=label, char=hex(ord(char)), provider=provider, model=model):
+                self.assert_usage(["setup", self.tree.project, "--reducer", f"{provider}/{model}"],
+                                  "--reducer")
 
     def test_a_malformed_format_answers_a_usage_error_in_toon(self):
         for args in (["--format", "xml"], ["setup", self.tree.project, "--format", "yaml"],
