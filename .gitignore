@@ -41,3 +41,6 @@ docs/superpowers/plans/
 .pi/settings.json
 .pi/sol-pi.json
 .lean-ctx.toml
+hooks/
+.envrc
+crucible.toml
