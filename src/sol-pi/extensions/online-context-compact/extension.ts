@@ -29,6 +29,7 @@ import {
 	type OnlineState,
 	type ProgressSummary,
 } from "./state.ts";
+import { captureSubagentsProbe, type SubagentsProbe } from "./subagents.ts";
 import { registerOnlineTools, type PlanUpdateInput } from "./tools.ts";
 
 export const DEFAULT_KEEP_RECENT_TOKENS = 20_000;
@@ -57,7 +58,7 @@ export type OnlineContextCompactOptions = {
 	readonly keepRecentTokens?: number;
 };
 
-type PendingBoundary = { readonly toolCallId: string };
+type PendingBoundary = { readonly toolCallId: string; readonly stepId: string };
 type SelectedCompaction = { readonly decision: CompactionDecision };
 type CacheDebt = { readonly debtTokens: number; readonly repaymentTokens: number };
 type PendingContinuation = { readonly promise: Promise<void>; readonly resolve: () => void };
@@ -165,6 +166,8 @@ export function createOnlineContextCompactExtension(options: OnlineContextCompac
 		let compactionInFlight = false;
 		let requestPending = false;
 		let compactionRefused = false;
+		// Captured at the instance's first session_start and never re-read; see subagents.ts.
+		let subagentsRunning: SubagentsProbe | undefined;
 
 		const releaseContinuation = (): void => {
 			const continuation = nextContinuation;
@@ -224,7 +227,7 @@ export function createOnlineContextCompactExtension(options: OnlineContextCompac
 				const completedIds = transition.completedSteps.map((step) => step.id);
 				if (completedIds.length > 0) {
 					state = recordBoundary(state, steps, progressSummary(input, completedIds[0] ?? ""));
-					if (!pendingBoundary) pendingBoundary = { toolCallId: input.toolCallId };
+					if (!pendingBoundary) pendingBoundary = { toolCallId: input.toolCallId, stepId: completedIds[0] ?? "" };
 				} else {
 					state = { ...state, plan: [...steps] };
 				}
@@ -243,7 +246,10 @@ export function createOnlineContextCompactExtension(options: OnlineContextCompac
 			},
 		});
 
-		pi.on("session_start", (_event, context) => restore(context));
+		pi.on("session_start", (_event, context) => {
+			subagentsRunning ??= captureSubagentsProbe();
+			restore(context);
+		});
 		pi.on("session_before_tree", () => (compactionInFlight ? { cancel: true } : undefined));
 		pi.on("session_tree", (_event, context) => restore(context));
 
@@ -318,11 +324,9 @@ export function createOnlineContextCompactExtension(options: OnlineContextCompac
 				keepRecentTokens,
 				observedMessages,
 			);
-			const contextWindowTokens = validPositiveInteger(usage?.contextWindow)
-				? usage.contextWindow
-				: validPositiveInteger(context.model?.contextWindow)
-					? context.model.contextWindow
-					: null;
+			let contextWindowTokens: number | null = null;
+			if (validPositiveInteger(usage?.contextWindow)) contextWindowTokens = usage.contextWindow;
+			else if (validPositiveInteger(context.model?.contextWindow)) contextWindowTokens = context.model.contextWindow;
 			const averageContextTokenIncrement =
 				state.positiveContextDeltaCount === 0
 					? null
@@ -351,6 +355,17 @@ export function createOnlineContextCompactExtension(options: OnlineContextCompac
 					? { ...priced, compact: false, reason: "native_not_compactable" }
 					: priced;
 			if (!decision.compact) return;
+
+			// A boundary abort reaches pi-subagents as the user's ESC and stops every running agent.
+			// Defer instead; the next completed step decides afresh.
+			if (subagentsRunning?.()) {
+				pi.appendEntry("sol-pi-online-context-compact-deferred", {
+					stepId: boundary.stepId,
+					reason: "subagents-running",
+				});
+				if (context.mode === "tui") context.ui.notify("Online compaction deferred: sub-agents are running", "info");
+				return;
+			}
 
 			selected = { decision };
 			context.abort();
@@ -452,8 +467,8 @@ export function createOnlineContextCompactExtension(options: OnlineContextCompac
 				const recoverableError = failure !== undefined && RECOVERABLE_COMPACTION_ERRORS.has(failure.message);
 				if (recoverableError) {
 					compactionRefused = true;
-					pi.appendEntry("sol-pi-online-context-compact-skipped", { reason: failure!.message });
-					if (context.mode === "tui") context.ui.notify(`Online compaction skipped: ${failure!.message}`, "warning");
+					pi.appendEntry("sol-pi-online-context-compact-skipped", { reason: failure.message });
+					if (context.mode === "tui") context.ui.notify(`Online compaction skipped: ${failure.message}`, "warning");
 				}
 
 				// The run was stopped for this compaction, so resume it unless the user cancelled.

@@ -5,7 +5,9 @@
 
 import type { ExtensionContext, Theme } from "@earendil-works/pi-coding-agent";
 import { Text } from "@earendil-works/pi-tui";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "bun:test";
+import { DEFAULT_CONFIG } from "../src/sol-pi/config.ts";
+import { createSolPiExtension } from "../src/sol-pi/index.ts";
 import {
 	formatSavingsBytes,
 	formatSavingsCount,
@@ -13,6 +15,11 @@ import {
 	renderSolPiTool,
 	showSolPiSavings,
 } from "../src/sol-pi/tui.ts";
+import { FakePi, FakeSessionManager, fakeContext } from "./helpers.ts";
+
+/** The error Pi throws from a context used after its session was replaced, reloaded or shut down. */
+const STALE_CONTEXT_ERROR =
+	"This extension ctx is stale after session replacement or reload. Do not use a captured pi or command ctx after ctx.newSession(), ctx.fork(), ctx.switchSession(), or ctx.reload().";
 
 const theme = {
 	fg: (_color: string, text: string) => text,
@@ -68,6 +75,39 @@ describe("SoL-Pi TUI savings presentation", () => {
 		);
 		vi.advanceTimersByTime(4_000);
 		expect(setStatus).toHaveBeenLastCalledWith("sol-pi-savings", undefined);
+	});
+
+	it("clears its status timer at session_shutdown and ignores a timer that fires on a stale context", async () => {
+		vi.useFakeTimers();
+		const pi = new FakePi();
+		createSolPiExtension(() => ({ ...DEFAULT_CONFIG, onlineContextCompact: true }))(pi.asExtensionApi());
+		const notify = vi.fn();
+		const setStatus = vi.fn();
+		const context = fakeContext(new FakeSessionManager(), { mode: "tui", hasUI: true, ui: { notify, setStatus } as never });
+		await pi.emit("session_start", { type: "session_start" }, context);
+
+		showSolPiSavings(context, "Online Context Compact", "84,026 context tokens removed");
+		expect(setStatus).toHaveBeenCalledTimes(1);
+		await pi.emit("session_shutdown", { type: "session_shutdown" }, context);
+		const callsAtShutdown = setStatus.mock.calls.length;
+		vi.advanceTimersByTime(4_100);
+		// The session is gone, so its status timer no longer touches its UI.
+		expect(setStatus).toHaveBeenCalledTimes(callsAtShutdown);
+
+		// A timer that fires on a context Pi has already invalidated does nothing.
+		let stale = false;
+		const staleSetStatus = vi.fn(() => {
+			if (stale) throw new Error(STALE_CONTEXT_ERROR);
+		});
+		const staleContext = { mode: "tui", ui: { notify: vi.fn(), setStatus: staleSetStatus } } as unknown as ExtensionContext;
+		showSolPiSavings(staleContext, "Action Fusion", "1 model round-trip avoided");
+		expect(staleSetStatus).toHaveBeenCalledWith("sol-pi-savings", "⚡ Action Fusion · 1 model round-trip avoided");
+		stale = true;
+		expect(() => vi.advanceTimersByTime(4_100)).not.toThrow();
+		// The timer fired: it called the stale context's setStatus, which threw, and the error was swallowed.
+		expect(staleSetStatus).toHaveBeenCalledTimes(2);
+		expect(staleSetStatus).toHaveBeenLastCalledWith("sol-pi-savings", undefined);
+		expect(staleSetStatus.mock.results[1]?.type).toBe("throw");
 	});
 
 	it("recognizes calls a tool made through ctx.executeTool by their <parent>/<n> id", () => {

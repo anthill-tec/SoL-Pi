@@ -18,7 +18,7 @@ same through the host model, which costs a few extra host turns.
 
 ## Usage
 
-Requirements: Node.js 22.19+, npm, Python 3.10+, and Pi set up with at least one
+Requirements: Node.js 22.19+, Bun 1.4.4+, Python 3.10+, and Pi set up with at least one
 model you can use (`pi`, then `/login`, or providers in `~/.pi/agent/models.json`).
 
 From the SoL-Pi repository root:
@@ -35,7 +35,7 @@ sol-pi-run setup
 sol-pi-run doctor --live      # every line [ok]; --live makes one short model call
 ```
 
-`setup` follows [agents-install.md](../../agents-install.md): it runs `npm run
+`setup` follows [agents-install.md](../../agents-install.md): it runs `bun run
 check`, `scripts/check-pi-compat.mjs` and `tests/all-mechanisms.test.ts`, and
 validates the config with `check-sol-pi-config.mjs --require-all-enabled`.
 Everything it creates lives under `~/.sol-pi` (`SOL_PI_HOME` changes it). Your
@@ -132,4 +132,4 @@ keeps `~/.sol-pi/runs/<id>/` with `prompt.md` (exactly what SoL-Pi received),
   config into `$TMPDIR/sol-pi-<uid>/`; `doctor` prints which one it uses.
 - Transcript formats are internal to Claude Code and Codex and may change. If an
   export looks wrong, run `sol-pi-context | head` from inside the session.
-- Tested with Pi 0.85.1.
+- Runs on the Pi release pinned in this repository's `package.json`.

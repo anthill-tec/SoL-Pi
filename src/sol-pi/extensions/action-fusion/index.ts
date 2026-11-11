@@ -34,9 +34,37 @@ import { isNestedToolCallId, renderSolPiTool, showSolPiSavings } from "../../tui
 import { createThenRunSchema, runFusedMutation, type ThenRunInput, type ThenRunStatus } from "./then-run.ts";
 
 const EDIT_THEN_RUN_DESCRIPTION =
-	"Command to run next on this file after the edit succeeds — e.g. run, build, start/restart, install, or check it; optional timeout in seconds. Skipped if the edit fails; a non-zero exit is reported but keeps the edit.";
+	"Command to run next on this file after the edit succeeds — e.g. run, build, test, check, install, or restart a service; optional timeout in seconds. Skipped if the edit fails; a non-zero exit is reported but keeps the edit.";
 const WRITE_THEN_RUN_DESCRIPTION =
-	"Command to run next on this file after the write succeeds — e.g. run, build, start/restart, install, or check it; optional timeout in seconds. Skipped if the write fails; a non-zero exit is reported but keeps the write.";
+	"Command to run next on this file after the write succeeds — e.g. run, build, test, check, install, or restart a service; optional timeout in seconds. Skipped if the write fails; a non-zero exit is reported but keeps the write.";
+
+/** The prompt text a fused tool contributes to Pi's system prompt. */
+export interface FusedToolPrompt {
+	readonly promptSnippet: string;
+	readonly promptGuidelines: string[];
+}
+
+/**
+ * Build a fused tool's `promptSnippet` and `promptGuidelines` from its base
+ * definition: Pi's own text first, unchanged, then SoL-Pi's `then_run` guidance.
+ */
+export function fusedToolPrompt(
+	base: { readonly promptSnippet?: string; readonly promptGuidelines?: readonly string[] },
+	name: string,
+): FusedToolPrompt {
+	const promptSnippet = base.promptSnippet
+		? `${base.promptSnippet}; optional then_run runs a follow-up command after the change`
+		: `The ${name} tool's optional then_run runs a follow-up command after the change.`;
+	return {
+		promptSnippet,
+		promptGuidelines: [
+			...(base.promptGuidelines ?? []),
+			`Use ${name}'s then_run when the next step after the change is a command that finishes (run, build, test, check, install, or restart a service); it runs in the session's working directory.`,
+			`Leave out ${name}'s then_run when the next step needs the change's result read first, or when the command keeps running (a server or watcher in the foreground), which is started separately.`,
+			`The command in ${name}'s then_run runs only after a successful change; a non-zero exit fails the call but keeps the change, so fix forward in the next call instead of repeating the change.`,
+		],
+	};
+}
 
 export interface ActionFusionOptions {
 	/** Optional programmatic bash overrides, primarily for tests and embedded runtimes. */
@@ -82,6 +110,16 @@ function showsSavingsBanner(thenRun: unknown, context: { readonly isError?: bool
 	return Boolean(thenRun) && !context.isError;
 }
 
+/**
+ * Narrow a built-in renderer the fused tool inherits. Pi's built-in `edit` and
+ * `write` definitions always carry both renderers; the tool type marks them
+ * optional, so a missing one is a broken Pi install and fails loudly.
+ */
+function inheritedRenderer<T>(renderer: T | undefined, tool: string, kind: string): T {
+	if (renderer === undefined) throw new Error(`Pi's built-in ${tool} tool has no ${kind} to inherit`);
+	return renderer;
+}
+
 export function createActionFusionExtension(options: ActionFusionOptions = {}): ExtensionFactory {
 	const baseEdit = memoizeByCwd((cwd: string) => createEditToolDefinition(cwd, options.editOptions));
 	const baseWrite = memoizeByCwd((cwd: string) => createWriteToolDefinition(cwd, options.writeOptions));
@@ -101,6 +139,7 @@ export function createActionFusionExtension(options: ActionFusionOptions = {}): 
 
 		pi.registerTool<typeof editParameters, EditToolDetails | undefined>({
 			...editTemplate,
+			...fusedToolPrompt(editTemplate, "edit"),
 			parameters: editParameters,
 			async execute(toolCallId, input, signal, onUpdate, ctx) {
 				const { then_run, ...editInput } = input as typeof input & { then_run?: ThenRunInput };
@@ -117,13 +156,15 @@ export function createActionFusionExtension(options: ActionFusionOptions = {}): 
 				return result;
 			},
 			renderCall: (args, theme, context) => {
-				const base = baseEdit(context.cwd).renderCall!(args, theme, context);
+				const renderCall = inheritedRenderer(baseEdit(context.cwd).renderCall, "edit", "renderCall");
+				const base = renderCall(args, theme, context);
 				return showsSavingsBanner(args.then_run, context)
 					? renderSolPiTool(theme, "Action Fusion", "1 model round-trip avoided", base)
 					: base;
 			},
 			renderResult: (result, resultOptions, theme, context) => {
-				const base = baseEdit(context.cwd).renderResult!(result, resultOptions, theme, context);
+				const renderResult = inheritedRenderer(baseEdit(context.cwd).renderResult, "edit", "renderResult");
+				const base = renderResult(result, resultOptions, theme, context);
 				return showsSavingsBanner(context.args.then_run, context)
 					? renderSolPiTool(theme, "Action Fusion", "1 model round-trip avoided", base)
 					: base;
@@ -132,6 +173,7 @@ export function createActionFusionExtension(options: ActionFusionOptions = {}): 
 
 		pi.registerTool<typeof writeParameters, undefined>({
 			...writeTemplate,
+			...fusedToolPrompt(writeTemplate, "write"),
 			parameters: writeParameters,
 			async execute(toolCallId, input, signal, onUpdate, ctx) {
 				const { then_run, ...writeInput } = input as typeof input & { then_run?: ThenRunInput };
@@ -148,13 +190,15 @@ export function createActionFusionExtension(options: ActionFusionOptions = {}): 
 				return result;
 			},
 			renderCall: (args, theme, context) => {
-				const base = baseWrite(context.cwd).renderCall!(args, theme, context);
+				const renderCall = inheritedRenderer(baseWrite(context.cwd).renderCall, "write", "renderCall");
+				const base = renderCall(args, theme, context);
 				return showsSavingsBanner(args.then_run, context)
 					? renderSolPiTool(theme, "Action Fusion", "1 model round-trip avoided", base)
 					: base;
 			},
 			renderResult: (result, resultOptions, theme, context) => {
-				const base = baseWrite(context.cwd).renderResult!(result, resultOptions, theme, context);
+				const renderResult = inheritedRenderer(baseWrite(context.cwd).renderResult, "write", "renderResult");
+				const base = renderResult(result, resultOptions, theme, context);
 				return showsSavingsBanner(context.args.then_run, context)
 					? renderSolPiTool(theme, "Action Fusion", "1 model round-trip avoided", base)
 					: base;

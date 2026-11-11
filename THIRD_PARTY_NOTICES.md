@@ -8,17 +8,25 @@ The following packages are supplied by the user's Pi installation and retain the
 
 | Package | Development-tested version | License | Source |
 |---|---:|---|---|
-| `@earendil-works/pi-agent-core` | 1.3.0 | MIT | <https://github.com/earendil-works/pi> |
-| `@earendil-works/pi-ai` | 1.3.0 | MIT | <https://github.com/earendil-works/pi> |
-| `@earendil-works/pi-coding-agent` | 1.3.0 | MIT | <https://github.com/earendil-works/pi> |
-| `@earendil-works/pi-tui` | 1.3.0 | MIT | <https://github.com/earendil-works/pi> |
+| `@earendil-works/pi-agent-core` | 1.5.0 | MIT | <https://github.com/earendil-works/pi> |
+| `@earendil-works/pi-ai` | 1.5.0 | MIT | <https://github.com/earendil-works/pi> |
+| `@earendil-works/pi-coding-agent` | 1.5.0 | MIT | <https://github.com/earendil-works/pi> |
+| `@earendil-works/pi-tui` | 1.5.0 | MIT | <https://github.com/earendil-works/pi> |
 | `typebox` | 1.3.27 | MIT | <https://github.com/sinclairzx81/typebox> |
 
-The four Pi packages are also tested at 1.0.4 and at 0.84.2, the supported floor.
+The four Pi packages are also tested at 1.3.0, at 1.0.4 and at 0.84.2, the supported floor.
+
+## `sol-pi-axi` runtime dependency
+
+The `sol-pi-axi` Python command (the `sol-pi-axi` distribution) depends on one package, installed beside it by `uv tool install` and not vendored:
+
+| Package | Version | License | Source |
+|---|---:|---|---|
+| `toon-format` | 1.2.0 | MIT | <https://pypi.org/project/toon-format/> |
 
 ## Development-only dependencies
 
-`@types/node` (MIT), TypeScript (Apache-2.0), and Vitest (MIT) are used to type-check and test the repository. They are not included in the SoL-Pi npm tarball. Exact versions and transitive dependency metadata are recorded in `package-lock.json`.
+`@types/bun` (MIT), TypeScript (Apache-2.0), and `@types/node` (MIT) are used to type-check and test the repository with Bun. They are not included in the SoL-Pi npm tarball. Exact versions and transitive dependency metadata are recorded in `bun.lock`.
 
 ## Star history chart generation
 

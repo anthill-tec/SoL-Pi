@@ -6,7 +6,7 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "bun:test";
 import { CONFIG_DIR_NAME } from "@earendil-works/pi-coding-agent";
 import { DEFAULT_CONFIG, findConfigPath, loadSolPiConfig } from "../src/sol-pi/config.ts";
 import {

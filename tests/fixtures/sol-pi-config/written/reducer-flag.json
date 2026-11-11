@@ -1,0 +1,10 @@
+{
+	"version": 1,
+	"actionFusion": true,
+	"observationPack": true,
+	"evidencePreservingReducer": true,
+	"evidencePreservingReducerProvider": "openrouter",
+	"evidencePreservingReducerModel": "qwen/qwen3-coder",
+	"onlineContextCompact": true,
+	"cacheWriteReadRatio": 12.5
+}

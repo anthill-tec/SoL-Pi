@@ -6,14 +6,14 @@ SoL-Pi is a Pi extension. It runs with the filesystem, process, network, and cre
 
 - Action Fusion can modify files and run shell commands requested by the model.
 - ObservationPack stores large tool results under Pi's session directory.
-- Evidence-Preserving Reducer archives diagnostic logs locally and, when explicitly enabled, sends eligible logs through the configured reducer model using Pi-managed authentication.
+- Evidence-Preserving Reducer archives diagnostic logs locally and, when enabled, sends eligible logs through the configured reducer model using Pi-managed authentication. `sol-pi-axi install` and `sol-pi-axi setup` enable it by default; pass `--features` without `evidencePreservingReducer` to keep logs local.
 - The reducer skips text matching its likely-secret detector, but that detector is a precaution rather than a complete secret scanner. Do not enable remote reduction for workloads whose logs must remain local.
 - Online Context Compact stores plan and compaction state in Pi's session log; see below.
 - Project-local `.pi/sol-pi.json` files should be used only in trusted repositories.
 
 ## Online Context Compact data
 
-Online Context Compact is off by default. When enabled, every `update_plan` call appends a versioned custom state entry to Pi's session log. The latest valid entry holds the model-authored plan, concise progress fields, request counts, token-growth estimates, and compaction debt. These values can include paths, command names, and design notes and should be treated as sensitive as the rest of the conversation. After a successful compaction, the extension also writes one hidden, generic custom message that tells the assistant to rebuild its plan; the reminder contains no task-specific data.
+Online Context Compact is off until a `sol-pi.json` enables it, which `sol-pi-axi install` and `sol-pi-axi setup` do by default. When enabled, every `update_plan` call appends a versioned custom state entry to Pi's session log. The latest valid entry holds the model-authored plan, concise progress fields, request counts, token-growth estimates, and compaction debt. These values can include paths, command names, and design notes and should be treated as sensitive as the rest of the conversation. After a successful compaction, the extension also writes one hidden, generic custom message that tells the assistant to rebuild its plan; the reminder contains no task-specific data.
 
 The extension creates no sidecar, attestation, payload-capture, or research-instrumentation files. State entries do not enter the model context; only the generic post-compaction reminder does. Deleting the Pi session removes both kinds of persisted Online Context Compact data.
 

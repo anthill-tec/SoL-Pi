@@ -4,15 +4,20 @@
  */
 
 import { spawnSync } from "node:child_process";
-import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { copyFileSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, join, sep } from "node:path";
 import { pathToFileURL } from "node:url";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
-
-interface PackReport {
-	files: Array<{ path: string }>;
-}
+import {
+	CONFIG_DIR_NAME,
+	createAgentSession,
+	DefaultResourceLoader,
+	SessionManager,
+	SettingsManager,
+	type AgentSession,
+} from "@earendil-works/pi-coding-agent";
+import { fauxProvider } from "@earendil-works/pi-ai/providers/faux";
+import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 
 interface PackageManifest {
 	peerDependencies: Record<string, string>;
@@ -47,17 +52,15 @@ function declaredFloor(range: string): string {
 	return match[0];
 }
 
+/** The package's file paths, from the `packed <size> <path>` lines `bun pm pack --dry-run` prints. */
 function packedFiles(): string[] {
-	const result = spawnSync("npm", ["pack", "--dry-run", "--json"], {
+	const result = spawnSync("bun", ["pm", "pack", "--dry-run"], {
 		cwd: process.cwd(),
 		encoding: "utf8",
 		timeout: 25_000,
-		// Windows resolves `npm` through npm.cmd, which Node only spawns through a shell.
-		shell: process.platform === "win32",
 	});
 	if (result.status !== 0) throw new Error(result.stderr || result.stdout);
-	const report = JSON.parse(result.stdout) as PackReport[];
-	return report[0]?.files.map((file) => file.path) ?? [];
+	return result.stdout.split(/\r?\n/u).flatMap((line) => /^packed \S+ (.+)$/u.exec(line)?.[1] ?? []);
 }
 
 describe("published package", () => {
@@ -87,10 +90,16 @@ describe("published package", () => {
 		expect(files).not.toContain("AGENTS.md");
 		expect(files).not.toContain("CLAUDE.md");
 	});
+
+	it("ships no Python file and no pyproject.toml: sol-pi-axi is its own PyPI package", () => {
+		expect(files.length).toBeGreaterThan(0);
+		expect(files.filter((file) => file.endsWith(".py"))).toEqual([]);
+		expect(files.filter((file) => file.split("/").pop() === "pyproject.toml")).toEqual([]);
+	});
 });
 
 function runScript(script: string, args: string[]): { status: number | null; output: string } {
-	const result = spawnSync(process.execPath, [script, ...args], { cwd: process.cwd(), encoding: "utf8" });
+	const result = spawnSync("node", [script, ...args], { cwd: process.cwd(), encoding: "utf8" });
 	return { status: result.status, output: `${result.stdout}${result.stderr}` };
 }
 
@@ -99,8 +108,8 @@ function checkPiCompat(...args: string[]): { status: number | null; output: stri
 }
 
 // Every check starts a Node process that loads Pi; on slow shared file systems that takes longer than
-// Vitest's 5 s default.
-describe("Pi compatibility check", { timeout: 30_000 }, () => {
+// Bun's 5 s default, so each test has a 30 s timeout.
+describe("Pi compatibility check", () => {
 	const baseline = checkPiCompat();
 	const detected = /^Pi: @earendil-works\/pi-coding-agent@(\S+) \((.+)\)$/m.exec(baseline.output);
 	const roots: string[] = [];
@@ -154,6 +163,87 @@ describe("Pi compatibility check", { timeout: 30_000 }, () => {
 		return root;
 	}
 
+	/**
+	 * Pi 1.5.0's internal package graph: each package's exact `@earendil-works/pi-*` dependencies.
+	 * pi-schema and pi-telemetry are reached only through pi-ai and pi-agent-core.
+	 */
+	const PI_1_5_0_INTERNALS: Record<string, string[]> = {
+		"pi-agent-core": ["pi-ai", "pi-schema"],
+		"pi-ai": ["pi-schema", "pi-telemetry"],
+		"pi-codemode": [],
+		"pi-mcp": [],
+		"pi-schema": [],
+		"pi-telemetry": [],
+		"pi-tui": [],
+	};
+	const PI_1_5_0_DIRECT = ["pi-agent-core", "pi-ai", "pi-codemode", "pi-mcp", "pi-tui"];
+
+	/** The file a real Pi sibling package exports at `subpath` (the conditions Pi packages use). */
+	function realEntry(sibling: string, subpath: string): string {
+		const dir = join(dirname(realPiDir()), sibling);
+		const manifest = JSON.parse(readFileSync(join(dir, "package.json"), "utf8")) as {
+			main?: string;
+			exports?: Record<string, { import?: string } | string>;
+		};
+		const target = manifest.exports?.[subpath];
+		const file = typeof target === "string" ? target : (target?.import ?? (subpath === "." ? manifest.main : undefined));
+		if (!file) throw new Error(`${sibling} does not export ${subpath}`);
+		return pathToFileURL(join(dir, file)).href;
+	}
+
+	/**
+	 * A complete Pi `version` install shaped like Pi 1.5.0: pi-coding-agent exports its own `VERSION`
+	 * (not the development dependency's) and re-exports every other name from the real one, and every
+	 * internal package of Pi 1.5.0's graph is installed at `version` unless `installed` names another
+	 * version for it. pi-ai and pi-tui re-export the real packages, so the API checks still load them.
+	 */
+	function fakePiRelease(version: string, installed: Record<string, string> = {}): string {
+		const root = tempRoot();
+		const scope = join(root, "node_modules", "@earendil-works");
+		const pin = (names: string[]) =>
+			Object.fromEntries(names.map((name) => [`@earendil-works/${name}`, version]));
+		const reexports: Record<string, Record<string, string>> = {
+			"pi-ai": { ".": realEntry("pi-ai", "."), "./compat": realEntry("pi-ai", "./compat") },
+			"pi-tui": { ".": realEntry("pi-tui", ".") },
+		};
+		for (const [name, dependencies] of Object.entries(PI_1_5_0_INTERNALS)) {
+			const dir = join(scope, name);
+			mkdirSync(dir, { recursive: true });
+			const entries = reexports[name] ?? { ".": "" };
+			const exports: Record<string, string> = {};
+			for (const [subpath, real] of Object.entries(entries)) {
+				const file = `./${subpath === "." ? "index" : subpath.slice(2)}.js`;
+				exports[subpath] = file;
+				writeFileSync(join(dir, file), real ? `export * from ${JSON.stringify(real)};\n` : "export {};\n");
+			}
+			const manifest = {
+				name: `@earendil-works/${name}`,
+				version: installed[name] ?? version,
+				type: "module",
+				exports,
+				dependencies: pin(dependencies),
+			};
+			writeFileSync(join(dir, "package.json"), JSON.stringify(manifest));
+		}
+		const piDir = join(scope, "pi-coding-agent");
+		mkdirSync(join(piDir, "dist"), { recursive: true });
+		const manifest = {
+			name: "@earendil-works/pi-coding-agent",
+			version,
+			type: "module",
+			exports: { ".": { import: "./dist/index.js" } },
+			dependencies: pin(PI_1_5_0_DIRECT),
+		};
+		writeFileSync(join(piDir, "package.json"), JSON.stringify(manifest));
+		// A local export takes precedence over the star re-export, so VERSION is the fake's own.
+		const realIndex = pathToFileURL(join(realPiDir(), "dist", "index.js")).href;
+		writeFileSync(
+			join(piDir, "dist", "index.js"),
+			`export * from ${JSON.stringify(realIndex)};\nexport const VERSION = ${JSON.stringify(version)};\n`,
+		);
+		return root;
+	}
+
 	/** A SoL-Pi checkout with only the compat script, the given src/ files, and the real node_modules. */
 	function fakeCheckout(sources: Record<string, string>): string {
 		const root = tempRoot();
@@ -185,13 +275,13 @@ describe("Pi compatibility check", { timeout: 30_000 }, () => {
 		);
 		const explicit = checkPiCompat("--pi-root", realDir ?? "", "--strict");
 		expect(explicit.status, explicit.output).toBe(0);
-	});
+	}, 30_000);
 
 	it("fails below the supported Pi floor", () => {
 		const result = checkPiCompat("--pi-root", fakePi("0.80.0", "*"));
 		expect(result.status, result.output).toBe(1);
 		expect(result.output).toContain("Pi 0.80.0 is below the supported floor 0.84.2");
-	});
+	}, 30_000);
 
 	it("warns on untested Pi versions and fails them only under --strict", () => {
 		const root = fakePi("9.0.0", "*");
@@ -200,7 +290,7 @@ describe("Pi compatibility check", { timeout: 30_000 }, () => {
 		expect(relaxed.output).toContain("WARN: Pi 9.0.0 is not in the tested set");
 		const strict = checkPiCompat(`--pi-root=${root}`, "--strict");
 		expect(strict.status, strict.output).toBe(1);
-	});
+	}, 30_000);
 
 	it("warns when Pi's internal packages come from another release", () => {
 		// Pi before 1.3.0 depends on its internal packages with caret ranges, so a fresh install of
@@ -216,16 +306,75 @@ describe("Pi compatibility check", { timeout: 30_000 }, () => {
 		const relaxed = checkPiCompat("--pi-root", root);
 		expect(relaxed.status, relaxed.output).toBe(0);
 		expect(relaxed.output).toContain(`WARN: Pi ${version} is installed with internal packages from other releases (pi-codemode 99.0.0)`);
+		// The warning advises the latest tested release, Pi 1.5.0 (CR-SLP-002 §S2).
+		expect(relaxed.output).toContain("install Pi 1.5.0");
+		expect(relaxed.output).not.toContain("install Pi 1.3.0");
 		const strict = checkPiCompat("--pi-root", root, "--strict");
 		expect(strict.status, strict.output).toBe(1);
-	});
+	}, 30_000);
+
+	it("passes a Pi 1.5.0 install with its own VERSION and 1.5.0 internals under --strict without a warning", () => {
+		const root = fakePiRelease("1.5.0");
+		const result = checkPiCompat("--pi-root", root, "--strict");
+		expect(result.output).toMatch(/^Pi: @earendil-works\/pi-coding-agent@1\.5\.0 \(.+sol-pi-compat-.+\)$/mu);
+		expect(result.output).not.toContain("WARN:");
+		expect(result.output).not.toContain("ERROR:");
+		expect(result.output).toMatch(/^Pi compatibility: OK$/mu);
+		expect(result.status, result.output).toBe(0);
+	}, 30_000);
+
+	it("warns when an internal package Pi reaches only indirectly comes from another release", () => {
+		// pi-schema is not a direct dependency of pi-coding-agent 1.5.0; it arrives through pi-ai and
+		// pi-agent-core, so a check of the direct dependencies alone misses it.
+		const root = fakePiRelease("1.5.0", { "pi-schema": "1.4.0" });
+		const relaxed = checkPiCompat("--pi-root", root);
+		expect(relaxed.status, relaxed.output).toBe(0);
+		// Listed once, though two internal packages reach it, and no direct package is listed.
+		expect(relaxed.output).toContain("WARN: Pi 1.5.0 is installed with internal packages from other releases (pi-schema 1.4.0)");
+		expect(relaxed.output.match(/^WARN:/gmu)).toHaveLength(1);
+		const strict = checkPiCompat("--pi-root", root, "--strict");
+		expect(strict.status, strict.output).toBe(1);
+		expect(strict.output).toContain("Pi compatibility: FAIL");
+	}, 30_000);
+
+	it("warns on a nested copy of an internal package from another release beside a top-level copy of this release", () => {
+		// pi-agent-core resolves the top-level pi-schema 1.5.0, but pi-ai resolves its own nested
+		// pi-schema 1.4.0 first: both copies are installed, so the nested one is still checked.
+		const root = fakePiRelease("1.5.0");
+		const nested = join(root, "node_modules", "@earendil-works", "pi-ai", "node_modules", "@earendil-works", "pi-schema");
+		mkdirSync(nested, { recursive: true });
+		writeFileSync(join(nested, "index.js"), "export {};\n");
+		writeFileSync(
+			join(nested, "package.json"),
+			JSON.stringify({ name: "@earendil-works/pi-schema", version: "1.4.0", type: "module", exports: { ".": "./index.js" } }),
+		);
+		const relaxed = checkPiCompat("--pi-root", root);
+		expect(relaxed.status, relaxed.output).toBe(0);
+		expect(relaxed.output).toContain("WARN: Pi 1.5.0 is installed with internal packages from other releases (pi-schema 1.4.0)");
+		expect(relaxed.output.match(/^WARN:/gmu)).toHaveLength(1);
+		const strict = checkPiCompat("--pi-root", root, "--strict");
+		expect(strict.status, strict.output).toBe(1);
+	}, 30_000);
+
+	it("follows a dependency cycle between Pi's internal packages to an end and lists each package once", () => {
+		// pi-ai and pi-schema depend on each other.
+		const root = fakePiRelease("1.5.0", { "pi-schema": "1.4.0" });
+		const manifestPath = join(root, "node_modules", "@earendil-works", "pi-schema", "package.json");
+		const manifest = JSON.parse(readFileSync(manifestPath, "utf8")) as Record<string, unknown>;
+		writeFileSync(manifestPath, JSON.stringify({ ...manifest, dependencies: { "@earendil-works/pi-ai": "1.5.0" } }));
+		const relaxed = checkPiCompat("--pi-root", root);
+		expect(relaxed.status, relaxed.output).toBe(0);
+		expect(relaxed.output).toContain("WARN: Pi 1.5.0 is installed with internal packages from other releases (pi-schema 1.4.0)");
+		expect(relaxed.output.match(/^WARN:/gmu)).toHaveLength(1);
+		expect(relaxed.output).toMatch(/^Pi compatibility: OK \(with warnings\)$/mu);
+	}, 30_000);
 
 	it("fails when a Pi export SoL-Pi imports is missing", () => {
 		const result = checkPiCompat("--pi-root", fakePi("1.0.4", "{ VERSION, CONFIG_DIR_NAME }"));
 		expect(result.status, result.output).toBe(1);
 		expect(result.output).toContain("Missing public Pi API: @earendil-works/pi-coding-agent getAgentDir");
 		expect(result.output).toContain("Missing public Pi API: createBashToolDefinition");
-	});
+	}, 30_000);
 
 	it("checks only the Pi imports that survive TypeScript import elision", () => {
 		const typeOnly = [
@@ -243,7 +392,7 @@ describe("Pi compatibility check", { timeout: 30_000 }, () => {
 		expect(failing.status, failing.output).toBe(1);
 		expect(failing.output).toContain("Missing public Pi API: @earendil-works/pi-coding-agent notAPiExport");
 		expect(failing.output).not.toContain("ExtensionAPI");
-	});
+	}, 30_000);
 
 	it("reports the bash exit status line when bash throws on a non-zero exit", () => {
 		const legacyBash = [
@@ -254,7 +403,7 @@ describe("Pi compatibility check", { timeout: 30_000 }, () => {
 		const result = checkPiCompat("--pi-root", fakePi(realVersion(), "*", legacyBash), "--strict");
 		expect(result.status, result.output).toBe(0);
 		expect(result.output).toContain("bash non-zero exit: throws (Pi <= 0.98 behaviour): Command exited with code 3");
-	});
+	}, 30_000);
 
 	it("warns when the bash probe throws for a reason other than a non-zero exit", () => {
 		const brokenBash = [
@@ -270,7 +419,7 @@ describe("Pi compatibility check", { timeout: 30_000 }, () => {
 		expect(relaxed.output).toContain("WARN: bash probe threw for a reason other than a non-zero exit");
 		const strict = checkPiCompat("--pi-root", root, "--strict");
 		expect(strict.status, strict.output).toBe(1);
-	});
+	}, 30_000);
 
 	it("reports a Pi install that cannot be imported as a structured failure", () => {
 		const result = checkPiCompat("--pi-root", fakePi(realVersion(), "", 'throw new Error("broken install");'));
@@ -278,7 +427,7 @@ describe("Pi compatibility check", { timeout: 30_000 }, () => {
 		expect(result.output).toContain("ERROR: Cannot load @earendil-works/pi-coding-agent: broken install");
 		expect(result.output).toContain("Pi compatibility: FAIL");
 		expect(result.output).not.toMatch(/^\s+at /m);
-	});
+	}, 30_000);
 });
 
 describe("declared Pi compatibility", () => {
@@ -307,10 +456,11 @@ describe("declared Pi compatibility", () => {
 	});
 
 	it("keeps the lockfile root peers in step with the manifest", () => {
-		const lockfile = JSON.parse(readFileSync("package-lock.json", "utf8")) as {
-			packages: Record<string, Partial<PackageManifest>>;
+		// bun.lock is JSONC: it ends objects and arrays with trailing commas.
+		const lockfile = Bun.JSONC.parse(readFileSync("bun.lock", "utf8")) as {
+			workspaces: Record<string, Partial<PackageManifest>>;
 		};
-		const locked = piPackages.map((name) => lockfile.packages[""]?.peerDependencies?.[name]);
+		const locked = piPackages.map((name) => lockfile.workspaces[""]?.peerDependencies?.[name]);
 
 		expect(locked).toEqual(piPeerRanges());
 	});
@@ -321,4 +471,192 @@ describe("declared Pi compatibility", () => {
 			expect(compareVersions(declaredFloor(range), incompatible), range).toBeGreaterThan(0);
 		}
 	});
+});
+
+// --- The npm package `@anthill-tec/sol-pi` (CR-SLP-007 §S1) ------------------------------------------
+
+/** The release version both packages carry. */
+const RELEASE_VERSION = "0.1.0";
+
+/** `package.json` values §S1 leaves unchanged, as on the base branch (develop at CR-SLP-004's merge). */
+const BASE_FILES = [
+	"src/sol-pi",
+	"assets",
+	"docs/compatibility.md",
+	"docs/configuration.md",
+	"scripts/check-sol-pi-config.mjs",
+	"agents-install.md",
+	"README.md",
+	"LICENSE",
+	"CONTRIBUTING.md",
+	"SECURITY.md",
+	"THIRD_PARTY_NOTICES.md",
+	"sol-pi.example.json",
+];
+const BASE_PI = { extensions: ["./src/sol-pi/index.ts"] };
+const BASE_PEER_DEPENDENCIES = {
+	"@earendil-works/pi-agent-core": ">=0.84.2",
+	"@earendil-works/pi-ai": ">=0.84.2",
+	"@earendil-works/pi-coding-agent": ">=0.84.2",
+	"@earendil-works/pi-tui": ">=0.84.2",
+	typebox: "*",
+};
+
+/** The files `bun pm pack --dry-run` lists on the base branch, sorted. */
+const BASE_PACKED_FILES = [
+	"CONTRIBUTING.md",
+	"LICENSE",
+	"README.md",
+	"SECURITY.md",
+	"THIRD_PARTY_NOTICES.md",
+	"agents-install.md",
+	"assets/sol-pi-hero.png",
+	"docs/compatibility.md",
+	"docs/configuration.md",
+	"package.json",
+	"scripts/check-sol-pi-config.mjs",
+	"sol-pi.example.json",
+	"src/sol-pi/config.ts",
+	"src/sol-pi/extensions/action-fusion/file-queue.ts",
+	"src/sol-pi/extensions/action-fusion/index.ts",
+	"src/sol-pi/extensions/action-fusion/then-run.ts",
+	"src/sol-pi/extensions/evidence-preserving-reducer/archive.ts",
+	"src/sol-pi/extensions/evidence-preserving-reducer/candidate.ts",
+	"src/sol-pi/extensions/evidence-preserving-reducer/config.ts",
+	"src/sol-pi/extensions/evidence-preserving-reducer/index.ts",
+	"src/sol-pi/extensions/evidence-preserving-reducer/journal.ts",
+	"src/sol-pi/extensions/evidence-preserving-reducer/provider.ts",
+	"src/sol-pi/extensions/evidence-preserving-reducer/receipt.ts",
+	"src/sol-pi/extensions/observation-pack/index.ts",
+	"src/sol-pi/extensions/observation-pack/ledger.ts",
+	"src/sol-pi/extensions/observation-pack/observation.ts",
+	"src/sol-pi/extensions/online-context-compact/economics.ts",
+	"src/sol-pi/extensions/online-context-compact/extension.ts",
+	"src/sol-pi/extensions/online-context-compact/index.ts",
+	"src/sol-pi/extensions/online-context-compact/plan.ts",
+	"src/sol-pi/extensions/online-context-compact/projection.ts",
+	"src/sol-pi/extensions/online-context-compact/state.ts",
+	"src/sol-pi/extensions/online-context-compact/subagents.ts",
+	"src/sol-pi/extensions/online-context-compact/tools.ts",
+	"src/sol-pi/index.ts",
+	"src/sol-pi/runtime-paths.ts",
+	"src/sol-pi/shell-options.ts",
+	"src/sol-pi/tui.ts",
+];
+
+/** The tools SoL-Pi registers with every mechanism enabled. */
+const SOL_PI_TOOLS = ["edit", "obs_recall", "update_plan", "write"];
+
+describe("npm package @anthill-tec/sol-pi", () => {
+	const text = readFileSync("package.json", "utf8");
+	const manifest = JSON.parse(text) as Record<string, unknown>;
+
+	it("is named @anthill-tec/sol-pi, public, with the repository and the pi-package keyword", () => {
+		expect(manifest.name).toBe("@anthill-tec/sol-pi");
+		expect("private" in manifest).toBe(false);
+		expect(manifest.publishConfig).toEqual({ access: "public" });
+		// npm's normalised form, so `npm publish` corrects nothing.
+		expect(manifest.repository).toEqual({ type: "git", url: "git+https://github.com/anthill-tec/SoL-Pi.git" });
+		expect(manifest.keywords).toContain("pi-package");
+	});
+
+	it("is indented with two spaces", () => {
+		expect(text).toBe(`${JSON.stringify(manifest, null, 2)}\n`);
+		expect(text).not.toContain("\t");
+	});
+
+	it(`carries version ${RELEASE_VERSION} in package.json and sol_pi_axi/_version.py`, () => {
+		expect(manifest.version).toBe(RELEASE_VERSION);
+		expect(readFileSync("sol_pi_axi/_version.py", "utf8")).toBe(`__version__ = "${RELEASE_VERSION}"\n`);
+	});
+
+	it("keeps files, pi.extensions, peerDependencies and dependencies unchanged", () => {
+		expect(manifest.files).toEqual(BASE_FILES);
+		expect(manifest.pi).toEqual(BASE_PI);
+		expect(manifest.peerDependencies).toEqual(BASE_PEER_DEPENDENCIES);
+		expect("dependencies" in manifest).toBe(false);
+	});
+
+	it(`passes stamp_version.py check ${RELEASE_VERSION} pypi:. npm:.`, () => {
+		const result = spawnSync("python3", [".github/scripts/stamp_version.py", "check", RELEASE_VERSION, "pypi:.", "npm:."], {
+			cwd: process.cwd(),
+			encoding: "utf8",
+			timeout: 25_000,
+		});
+		expect({ status: result.status, stderr: result.stderr }).toEqual({ status: 0, stderr: "" });
+	}, 30_000);
+
+	it("packs the same files as the base branch", () => {
+		expect([...packedFiles()].sort()).toEqual(BASE_PACKED_FILES);
+	}, 30_000);
+
+	it("packs a tarball that the development dependency's Pi loads with its path as the extension, registering SoL-Pi's tools", async () => {
+		const root = mkdtempSync(join(tmpdir(), "sol-pi-tarball-"));
+		let session: AgentSession | undefined;
+		try {
+			const packed = spawnSync("bun", ["pm", "pack", "--destination", root], {
+				cwd: process.cwd(),
+				encoding: "utf8",
+				timeout: 25_000,
+			});
+			expect(packed.status, packed.stderr).toBe(0);
+			const tarballs = readdirSync(root).filter((name) => name.endsWith(".tgz"));
+			expect(tarballs).toHaveLength(1);
+			const unpacked = join(root, "unpacked");
+			mkdirSync(unpacked);
+			const untar = spawnSync("tar", ["-xzf", join(root, tarballs[0] ?? ""), "-C", unpacked], { encoding: "utf8" });
+			expect(untar.status, untar.stderr).toBe(0);
+			const packageDir = join(unpacked, "package");
+			const packedManifest = JSON.parse(readFileSync(join(packageDir, "package.json"), "utf8")) as Record<string, unknown>;
+			expect({ name: packedManifest.name, version: packedManifest.version })
+				.toEqual({ name: "@anthill-tec/sol-pi", version: RELEASE_VERSION });
+
+			const cwd = join(root, "project");
+			const agentDir = join(root, "agent");
+			mkdirSync(join(cwd, CONFIG_DIR_NAME), { recursive: true });
+			mkdirSync(agentDir);
+			writeFileSync(join(cwd, CONFIG_DIR_NAME, "sol-pi.json"), JSON.stringify({
+				version: 1,
+				actionFusion: true,
+				observationPack: true,
+				evidencePreservingReducer: true,
+				onlineContextCompact: true,
+			}));
+			const settingsManager = SettingsManager.inMemory({ compaction: { enabled: false }, retry: { enabled: false } }, { projectTrusted: true });
+			const resourceLoader = new DefaultResourceLoader({
+				cwd,
+				agentDir,
+				settingsManager,
+				additionalExtensionPaths: [packageDir],
+				noExtensions: true,
+				noSkills: true,
+				noPromptTemplates: true,
+				noThemes: true,
+				noContextFiles: true,
+			});
+			await resourceLoader.reload();
+			const loaded = resourceLoader.getExtensions();
+			expect(loaded.errors).toEqual([]);
+			const faux = fauxProvider({ provider: "sol-pi-tarball-test", api: "sol-pi-tarball-test-api" });
+			({ session } = await createAgentSession({
+				cwd,
+				agentDir,
+				model: faux.getModel(),
+				thinkingLevel: "off",
+				resourceLoader,
+				sessionManager: SessionManager.inMemory(cwd),
+				settingsManager,
+			}));
+			const errors: unknown[] = [];
+			await session.bindExtensions({ onError: (error) => errors.push(error) });
+			expect(errors).toEqual([]);
+			const solPi = loaded.extensions.filter((extension) => extension.resolvedPath.startsWith(`${packageDir}${sep}`));
+			expect(solPi).toHaveLength(1);
+			expect([...(solPi[0]?.tools.keys() ?? [])].sort()).toEqual(SOL_PI_TOOLS);
+			expect(session.getActiveToolNames()).toEqual(expect.arrayContaining(SOL_PI_TOOLS));
+		} finally {
+			session?.dispose();
+			rmSync(root, { recursive: true, force: true });
+		}
+	}, 60_000);
 });

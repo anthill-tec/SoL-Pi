@@ -1,0 +1,10 @@
+{
+	"version": 1,
+	"actionFusion": false,
+	"observationPack": true,
+	"evidencePreservingReducer": true,
+	"evidencePreservingReducerProvider": "anthropic",
+	"evidencePreservingReducerModel": "claude-sonnet-4-5",
+	"onlineContextCompact": false,
+	"cacheWriteReadRatio": 12.5
+}

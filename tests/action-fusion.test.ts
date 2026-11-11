@@ -2,25 +2,30 @@
  * SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: MIT
  */
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, vi } from "bun:test";
 import {
 	type BashOperations,
-	createBashToolDefinition,
-	type ExtensionAPI,
+	initTheme,
 	type ToolDefinition,
 } from "@earendil-works/pi-coding-agent";
 import {
-	type ActionFusionOptions,
 	assertUnchangedBeforeCommand,
-	createActionFusionExtension,
 	executeMutationThenRun,
 } from "../src/sol-pi/extensions/action-fusion/index.ts";
 import { withFusedFileQueue } from "../src/sol-pi/extensions/action-fusion/file-queue.ts";
 import { runFusedMutation } from "../src/sol-pi/extensions/action-fusion/then-run.ts";
-import { componentText, fakeToolContext, plainTheme, type ToolExecuteContext } from "./helpers.ts";
+import { loadFusedTools } from "./action-fusion-support.ts";
+import {
+	bashReturnsNonZeroExit,
+	componentText,
+	createTempDir,
+	fakeToolContext,
+	plainTheme,
+	type ToolExecuteContext,
+} from "./helpers.ts";
 
 function delay(ms: number): Promise<void> {
 	return new Promise((resolve) => setTimeout(resolve, ms));
@@ -42,22 +47,9 @@ function text(result: { content: Array<{ type: string; text?: string }> }): stri
 }
 
 type ObjectSchema = { properties: Record<string, unknown>; required?: string[] };
-type FusedTools = { edit: ToolDefinition; write: ToolDefinition };
 
 function objectSchema(tool: ToolDefinition): ObjectSchema {
 	return tool.parameters as unknown as ObjectSchema;
-}
-
-function loadFusedTools(options?: ActionFusionOptions): FusedTools {
-	const registered = new Map<string, ToolDefinition>();
-	const pi = {
-		registerTool: (tool: ToolDefinition) => registered.set(tool.name, tool),
-	} as unknown as ExtensionAPI;
-	createActionFusionExtension(options)(pi);
-	const edit = registered.get("edit");
-	const write = registered.get("write");
-	if (!edit || !write) throw new Error("action fusion did not register edit and write");
-	return { edit, write };
 }
 
 function createContext(cwd: string, overrides: Record<string, unknown> = {}): ToolExecuteContext {
@@ -70,29 +62,15 @@ function tuiContext(cwd: string) {
 	return { ctx: createContext(cwd, { mode: "tui", hasUI: true, ui: { notify, setStatus } }), notify, setStatus };
 }
 
-/**
- * Pi 0.99 changed bash to return a non-zero exit as an `isError` result; 0.84
- * throws. Detected from the installed bash, not from a version string.
- */
-async function bashReturnsNonZeroExit(): Promise<boolean> {
-	const bash = createBashToolDefinition(tmpdir(), { operations: { exec: async () => ({ exitCode: 7 }) } });
-	try {
-		await bash.execute("probe", { command: "exit 7" }, undefined, undefined, createContext(tmpdir()));
-		return true;
-	} catch {
-		return false;
-	}
-}
-
 const nonZeroExitIsResult = await bashReturnsNonZeroExit();
 
 const tempDirs: string[] = [];
 
-async function createTempDir(): Promise<string> {
-	const dir = await mkdtemp(join(tmpdir(), "pi-then-run-"));
-	tempDirs.push(dir);
-	return dir;
-}
+// Pi 1.5.0's write renderer highlights an incomplete call through Pi's process-global theme, which a
+// real TUI initializes before anything renders (CR-SLP-002 §S3).
+beforeAll(() => {
+	initTheme("dark");
+});
 
 afterEach(async () => {
 	vi.useRealTimers();
@@ -106,7 +84,7 @@ describe("action fusion then_run", () => {
 		expect(objectSchema(write).properties.then_run).toMatchObject({
 			type: "object",
 			description:
-				"Command to run next on this file after the write succeeds — e.g. run, build, start/restart, install, or check it; optional timeout in seconds. Skipped if the write fails; a non-zero exit is reported but keeps the write.",
+				"Command to run next on this file after the write succeeds — e.g. run, build, test, check, install, or restart a service; optional timeout in seconds. Skipped if the write fails; a non-zero exit is reported but keeps the write.",
 			properties: {
 				command: { type: "string" },
 				timeout: { type: "number" },
@@ -116,7 +94,7 @@ describe("action fusion then_run", () => {
 		expect(objectSchema(edit).properties.then_run).toMatchObject({
 			type: "object",
 			description:
-				"Command to run next on this file after the edit succeeds — e.g. run, build, start/restart, install, or check it; optional timeout in seconds. Skipped if the edit fails; a non-zero exit is reported but keeps the edit.",
+				"Command to run next on this file after the edit succeeds — e.g. run, build, test, check, install, or restart a service; optional timeout in seconds. Skipped if the edit fails; a non-zero exit is reported but keeps the edit.",
 			properties: {
 				command: { type: "string" },
 				timeout: { type: "number" },
@@ -207,13 +185,16 @@ describe("action fusion then_run", () => {
 			expect(succeeded.call).toContain("Money saved · 1 model round-trip avoided");
 			expect(succeeded.rendered).toContain("Money saved · 1 model round-trip avoided");
 			const failed = render(true);
-			expect(failed.call).not.toContain("SoL-Pi");
-			expect(failed.rendered).not.toContain("SoL-Pi");
+			// The banner itself, not the bare name: a rendered file link may contain the checkout's path.
+			expect(failed.call).not.toContain("⚡ SoL-Pi · Action Fusion");
+			expect(failed.call).not.toContain("Money saved · 1 model round-trip avoided");
+			expect(failed.rendered).not.toContain("⚡ SoL-Pi · Action Fusion");
+			expect(failed.rendered).not.toContain("Money saved · 1 model round-trip avoided");
 		}
 	});
 
 	it("runs write then_run through bash after the written content is visible", async () => {
-		const dir = await createTempDir();
+		const dir = await createTempDir("pi-then-run-", tempDirs);
 		const filePath = join(dir, "written.txt");
 		const commands: string[] = [];
 		const operations: BashOperations = {
@@ -241,7 +222,7 @@ describe("action fusion then_run", () => {
 	});
 
 	it("announces savings only after a fused command succeeds in TUI mode", async () => {
-		const dir = await createTempDir();
+		const dir = await createTempDir("pi-then-run-", tempDirs);
 		const notify = vi.fn();
 		const setStatus = vi.fn();
 		const { write } = loadFusedTools({
@@ -263,7 +244,7 @@ describe("action fusion then_run", () => {
 	});
 
 	it("runs edit then_run after the edited content is visible", async () => {
-		const dir = await createTempDir();
+		const dir = await createTempDir("pi-then-run-", tempDirs);
 		const filePath = join(dir, "edited.txt");
 		await writeFile(filePath, "before\n", "utf8");
 		const operations: BashOperations = {
@@ -288,7 +269,7 @@ describe("action fusion then_run", () => {
 	});
 
 	it("leaves a mutation without then_run untouched", async () => {
-		const dir = await createTempDir();
+		const dir = await createTempDir("pi-then-run-", tempDirs);
 		const filePath = join(dir, "plain.txt");
 		let bashCalls = 0;
 		const operations: BashOperations = {
@@ -313,7 +294,7 @@ describe("action fusion then_run", () => {
 	});
 
 	it("preserves a successful mutation when then_run fails", async () => {
-		const dir = await createTempDir();
+		const dir = await createTempDir("pi-then-run-", tempDirs);
 		const filePath = join(dir, "preserved.txt");
 		const operations: BashOperations = {
 			exec: async (_command, _cwd, { onData }) => {
@@ -346,7 +327,7 @@ describe("action fusion then_run", () => {
 	});
 
 	it("reports a real non-zero exit as a failure without a savings notice, even if the output looks successful", async () => {
-		const dir = await createTempDir();
+		const dir = await createTempDir("pi-then-run-", tempDirs);
 		const filePath = join(dir, "real-exit.txt");
 		const { ctx, notify, setStatus } = tuiContext(dir);
 		const { write } = loadFusedTools();
@@ -385,7 +366,7 @@ describe("action fusion then_run", () => {
 	});
 
 	it.skipIf(!nonZeroExitIsResult)("keeps the edit diff details when then_run exits non-zero", async () => {
-		const dir = await createTempDir();
+		const dir = await createTempDir("pi-then-run-", tempDirs);
 		const filePath = join(dir, "diff.txt");
 		await writeFile(filePath, "before\n", "utf8");
 		const { edit } = loadFusedTools({ bashOptions: { operations: { exec: async () => ({ exitCode: 3 }) } } });
@@ -405,7 +386,7 @@ describe("action fusion then_run", () => {
 	});
 
 	it("announces savings after a real successful command but not for calls nested in a script", async () => {
-		const dir = await createTempDir();
+		const dir = await createTempDir("pi-then-run-", tempDirs);
 		const { write } = loadFusedTools();
 		const direct = tuiContext(dir);
 		const nested = tuiContext(dir);
@@ -436,7 +417,7 @@ describe("action fusion then_run", () => {
 	});
 
 	it("does not announce savings for a mutation without then_run", async () => {
-		const dir = await createTempDir();
+		const dir = await createTempDir("pi-then-run-", tempDirs);
 		const { ctx, notify } = tuiContext(dir);
 		const { write } = loadFusedTools();
 
@@ -446,7 +427,7 @@ describe("action fusion then_run", () => {
 	});
 
 	it("skips the command when the mutation returns an error result", async () => {
-		const dir = await createTempDir();
+		const dir = await createTempDir("pi-then-run-", tempDirs);
 		let bashCalls = 0;
 		const options = {
 			toolCallId: "mutation-error",
@@ -481,7 +462,7 @@ describe("action fusion then_run", () => {
 	});
 
 	it("reports the then_run status explicitly", async () => {
-		const dir = await createTempDir();
+		const dir = await createTempDir("pi-then-run-", tempDirs);
 		await writeFile(join(dir, "status.txt"), "mutated\n", "utf8");
 		const base = {
 			absolutePath: join(dir, "status.txt"),
@@ -520,7 +501,7 @@ describe("action fusion then_run", () => {
 	});
 
 	it("skips then_run and reports it when the mutation fails", async () => {
-		const dir = await createTempDir();
+		const dir = await createTempDir("pi-then-run-", tempDirs);
 		let bashCalls = 0;
 		const operations: BashOperations = {
 			exec: async () => {
@@ -547,7 +528,7 @@ describe("action fusion then_run", () => {
 	});
 
 	it("keeps the file queue locked through then_run", async () => {
-		const dir = await createTempDir();
+		const dir = await createTempDir("pi-then-run-", tempDirs);
 		const filePath = join(dir, "ordered.txt");
 		const thenRunStarted = deferred();
 		const finishThenRun = deferred();
@@ -593,7 +574,7 @@ describe("action fusion then_run", () => {
 	});
 
 	it("passes then_run timeout through to the bash operation", async () => {
-		const dir = await createTempDir();
+		const dir = await createTempDir("pi-then-run-", tempDirs);
 		const operations: BashOperations = {
 			exec: async (command, _cwd, { timeout }) => {
 				expect(command).toBe("check with timeout");
@@ -615,7 +596,7 @@ describe("action fusion then_run", () => {
 	});
 
 	it("passes the command unchanged to Pi's default bash behavior", async () => {
-		const dir = await createTempDir();
+		const dir = await createTempDir("pi-then-run-", tempDirs);
 		const commands: string[] = [];
 		const operations: BashOperations = {
 			exec: async (command) => {
@@ -659,7 +640,7 @@ describe("action fusion then_run", () => {
 	});
 
 	it("skips the command when the target changes after mutation", async () => {
-		const dir = await createTempDir();
+		const dir = await createTempDir("pi-then-run-", tempDirs);
 		const filePath = join(dir, "changed-before-command.txt");
 		await writeFile(filePath, "mutation result\n");
 

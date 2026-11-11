@@ -7,7 +7,7 @@ import { rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { SessionManager, type ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "bun:test";
 import { runtimeRoot } from "../src/sol-pi/runtime-paths.ts";
 
 const temporaryRoots = new Set<string>();

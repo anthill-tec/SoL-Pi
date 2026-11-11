@@ -1,0 +1,53 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "sol-pi-axi"
+dynamic = ["version"]
+description = "Agent-facing setup command for the SoL-Pi Pi extensions"
+readme = "README.md"
+requires-python = ">=3.14"
+license = "MIT"
+license-files = ["LICENSE"]
+dependencies = ["toon-format==1.2.0"]
+
+[project.optional-dependencies]
+dev = ["unittest-xml-reporting", "coverage"]
+
+[project.scripts]
+sol-pi-axi = "sol_pi_axi.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/anthill-tec/SoL-Pi"
+Changelog = "https://github.com/anthill-tec/SoL-Pi/blob/main/CHANGELOG.md"
+"Release Notes" = "https://github.com/anthill-tec/SoL-Pi/releases"
+
+[tool.hatch.version]
+path = "sol_pi_axi/_version.py"
+
+[tool.hatch.build.targets.wheel]
+packages = ["sol_pi_axi"]
+
+[tool.hatch.build.targets.sdist]
+only-include = ["sol_pi_axi", "pyproject.toml", "README.md", "LICENSE"]
+
+# Pyright resolves third-party imports (toon_format) from the project's .venv and the
+# project's own modules (sol_pi_axi._version) from the repository root, whichever
+# directory it is started in. It checks the package and its tests; examples/ carries
+# its own runtime dependencies (Pillow), which the .venv does not install.
+[tool.pyright]
+venvPath = "."
+venv = ".venv"
+pythonVersion = "3.14"
+include = ["sol_pi_axi", "tests"]
+exclude = ["**/node_modules", "**/__pycache__", ".venv", ".worktrees", "test-reports", "examples"]
+
+# The CLI tests run `sol-pi-axi` (and the Pi stubs) as subprocesses. `patch = ["subprocess"]`
+# hands every Python child the run's configuration (COVERAGE_PROCESS_CONFIG, which
+# tests/sol_pi_axi_support.cli_environ forwards) so it measures itself; that implies
+# `parallel`, and each process writes `<data-file>.<host>.<pid>.<random>` beside the run's
+# data file. Reporting (`coverage lcov`/`report`) combines them and deletes the parts.
+[tool.coverage.run]
+patch = ["subprocess"]
+parallel = true

@@ -1,0 +1,337 @@
+{
+	"cases": [
+		{
+			"name": "minimal-valid",
+			"file": "cases/minimal-valid.json",
+			"valid": true,
+			"effective": {
+				"version": 1,
+				"actionFusion": false,
+				"observationPack": false,
+				"evidencePreservingReducer": false,
+				"evidencePreservingReducerProvider": "openai-codex",
+				"evidencePreservingReducerModel": "gpt-5.6-luna",
+				"onlineContextCompact": false,
+				"cacheWriteReadRatio": 12.5
+			},
+			"note": "only the version: every other value defaults"
+		},
+		{
+			"name": "every-key-valid",
+			"file": "cases/every-key-valid.json",
+			"valid": true,
+			"effective": {
+				"version": 1,
+				"actionFusion": true,
+				"observationPack": false,
+				"evidencePreservingReducer": true,
+				"evidencePreservingReducerProvider": "anthropic",
+				"evidencePreservingReducerModel": "claude-sonnet-4-5",
+				"onlineContextCompact": true,
+				"cacheWriteReadRatio": 3.25
+			},
+			"note": "every known key set"
+		},
+		{
+			"name": "unknown-key",
+			"file": "cases/unknown-key.json",
+			"valid": false,
+			"effective": null,
+			"note": "a misspelt key is unknown"
+		},
+		{
+			"name": "version-2",
+			"file": "cases/version-2.json",
+			"valid": false,
+			"effective": null,
+			"note": "only version 1 is known"
+		},
+		{
+			"name": "version-true",
+			"file": "cases/version-true.json",
+			"valid": false,
+			"effective": null,
+			"note": "a boolean is never the number 1"
+		},
+		{
+			"name": "version-1.0",
+			"file": "cases/version-1.0.json",
+			"valid": true,
+			"effective": {
+				"version": 1,
+				"actionFusion": false,
+				"observationPack": false,
+				"evidencePreservingReducer": false,
+				"evidencePreservingReducerProvider": "openai-codex",
+				"evidencePreservingReducerModel": "gpt-5.6-luna",
+				"onlineContextCompact": false,
+				"cacheWriteReadRatio": 12.5
+			},
+			"note": "JSON.parse reads 1.0 as the number 1"
+		},
+		{
+			"name": "version-string",
+			"file": "cases/version-string.json",
+			"valid": false,
+			"effective": null,
+			"note": "a string is not the number 1"
+		},
+		{
+			"name": "version-missing",
+			"file": "cases/version-missing.json",
+			"valid": false,
+			"effective": null,
+			"note": "the version is required"
+		},
+		{
+			"name": "feature-number",
+			"file": "cases/feature-number.json",
+			"valid": false,
+			"effective": null,
+			"note": "a number is not a boolean feature"
+		},
+		{
+			"name": "feature-string",
+			"file": "cases/feature-string.json",
+			"valid": false,
+			"effective": null,
+			"note": "a string is not a boolean feature"
+		},
+		{
+			"name": "feature-null",
+			"file": "cases/feature-null.json",
+			"valid": false,
+			"effective": null,
+			"note": "a present null is not a boolean feature"
+		},
+		{
+			"name": "ratio-negative",
+			"file": "cases/ratio-negative.json",
+			"valid": false,
+			"effective": null,
+			"note": "the ratio is non-negative"
+		},
+		{
+			"name": "ratio-string",
+			"file": "cases/ratio-string.json",
+			"valid": false,
+			"effective": null,
+			"note": "a string is not a number"
+		},
+		{
+			"name": "ratio-true",
+			"file": "cases/ratio-true.json",
+			"valid": false,
+			"effective": null,
+			"note": "a boolean is never a number"
+		},
+		{
+			"name": "ratio-null",
+			"file": "cases/ratio-null.json",
+			"valid": false,
+			"effective": null,
+			"note": "a present null is not a number"
+		},
+		{
+			"name": "ratio-nan",
+			"file": "cases/ratio-nan.json",
+			"valid": false,
+			"effective": null,
+			"note": "JSON.parse rejects NaN"
+		},
+		{
+			"name": "ratio-infinity",
+			"file": "cases/ratio-infinity.json",
+			"valid": false,
+			"effective": null,
+			"note": "JSON.parse rejects Infinity"
+		},
+		{
+			"name": "ratio-1e999",
+			"file": "cases/ratio-1e999.json",
+			"valid": false,
+			"effective": null,
+			"note": "JSON.parse reads 1e999 as Infinity, which is not finite"
+		},
+		{
+			"name": "ratio-huge-integer",
+			"file": "cases/ratio-huge-integer.json",
+			"valid": false,
+			"effective": null,
+			"note": "JSON.parse reads a 401-digit integer as Infinity, which is not finite"
+		},
+		{
+			"name": "ratio-zero",
+			"file": "cases/ratio-zero.json",
+			"valid": true,
+			"effective": {
+				"version": 1,
+				"actionFusion": false,
+				"observationPack": false,
+				"evidencePreservingReducer": false,
+				"evidencePreservingReducerProvider": "openai-codex",
+				"evidencePreservingReducerModel": "gpt-5.6-luna",
+				"onlineContextCompact": false,
+				"cacheWriteReadRatio": 0
+			},
+			"note": "zero is a finite non-negative ratio"
+		},
+		{
+			"name": "ratio-integer",
+			"file": "cases/ratio-integer.json",
+			"valid": true,
+			"effective": {
+				"version": 1,
+				"actionFusion": false,
+				"observationPack": false,
+				"evidencePreservingReducer": false,
+				"evidencePreservingReducerProvider": "openai-codex",
+				"evidencePreservingReducerModel": "gpt-5.6-luna",
+				"onlineContextCompact": false,
+				"cacheWriteReadRatio": 3
+			},
+			"note": "an integer ratio"
+		},
+		{
+			"name": "reducer-empty",
+			"file": "cases/reducer-empty.json",
+			"valid": false,
+			"effective": null,
+			"note": "an empty reducer provider"
+		},
+		{
+			"name": "reducer-whitespace-only",
+			"file": "cases/reducer-whitespace-only.json",
+			"valid": false,
+			"effective": null,
+			"note": "a reducer model that trim() empties"
+		},
+		{
+			"name": "reducer-js-whitespace-only",
+			"file": "cases/reducer-js-whitespace-only.json",
+			"valid": false,
+			"effective": null,
+			"note": "trim() also removes NBSP, BOM, LS and ideographic space"
+		},
+		{
+			"name": "reducer-non-string",
+			"file": "cases/reducer-non-string.json",
+			"valid": false,
+			"effective": null,
+			"note": "a number is not a reducer string"
+		},
+		{
+			"name": "reducer-null",
+			"file": "cases/reducer-null.json",
+			"valid": false,
+			"effective": null,
+			"note": "a present null is not a reducer string"
+		},
+		{
+			"name": "reducer-padded",
+			"file": "cases/reducer-padded.json",
+			"valid": true,
+			"effective": {
+				"version": 1,
+				"actionFusion": false,
+				"observationPack": false,
+				"evidencePreservingReducer": false,
+				"evidencePreservingReducerProvider": "anthropic",
+				"evidencePreservingReducerModel": "claude-sonnet-4-5",
+				"onlineContextCompact": false,
+				"cacheWriteReadRatio": 12.5
+			},
+			"note": "surrounding whitespace is trimmed"
+		},
+		{
+			"name": "reducer-padded-js-whitespace",
+			"file": "cases/reducer-padded-js-whitespace.json",
+			"valid": true,
+			"effective": {
+				"version": 1,
+				"actionFusion": false,
+				"observationPack": false,
+				"evidencePreservingReducer": false,
+				"evidencePreservingReducerProvider": "anthropic",
+				"evidencePreservingReducerModel": "claude-sonnet-4-5",
+				"onlineContextCompact": false,
+				"cacheWriteReadRatio": 12.5
+			},
+			"note": "trim() removes BOM, NBSP, LS and ideographic space"
+		},
+		{
+			"name": "reducer-padded-non-js-whitespace",
+			"file": "cases/reducer-padded-non-js-whitespace.json",
+			"valid": true,
+			"effective": {
+				"version": 1,
+				"actionFusion": false,
+				"observationPack": false,
+				"evidencePreservingReducer": false,
+				"evidencePreservingReducerProvider": "\u001fanthropic",
+				"evidencePreservingReducerModel": "claude-sonnet-4-5\u0085",
+				"onlineContextCompact": false,
+				"cacheWriteReadRatio": 12.5
+			},
+			"note": "trim() keeps U+001F and U+0085, which Python's str.strip() would remove"
+		},
+		{
+			"name": "json-array",
+			"file": "cases/json-array.json",
+			"valid": false,
+			"effective": null,
+			"note": "the root must be an object"
+		},
+		{
+			"name": "json-null",
+			"file": "cases/json-null.json",
+			"valid": false,
+			"effective": null,
+			"note": "the root must be an object"
+		},
+		{
+			"name": "json-string",
+			"file": "cases/json-string.json",
+			"valid": false,
+			"effective": null,
+			"note": "the root must be an object"
+		},
+		{
+			"name": "json-malformed",
+			"file": "cases/json-malformed.json",
+			"valid": false,
+			"effective": null,
+			"note": "malformed JSON"
+		},
+		{
+			"name": "json-trailing-comma",
+			"file": "cases/json-trailing-comma.json",
+			"valid": false,
+			"effective": null,
+			"note": "JSON.parse rejects a trailing comma"
+		},
+		{
+			"name": "json-bom-prefixed",
+			"file": "cases/json-bom-prefixed.json",
+			"valid": false,
+			"effective": null,
+			"note": "a UTF-8 BOM is read as U+FEFF, which JSON.parse rejects"
+		},
+		{
+			"name": "json-duplicate-key",
+			"file": "cases/json-duplicate-key.json",
+			"valid": true,
+			"effective": {
+				"version": 1,
+				"actionFusion": false,
+				"observationPack": false,
+				"evidencePreservingReducer": false,
+				"evidencePreservingReducerProvider": "openai-codex",
+				"evidencePreservingReducerModel": "gpt-5.6-luna",
+				"onlineContextCompact": false,
+				"cacheWriteReadRatio": 12.5
+			},
+			"note": "JSON.parse keeps the last duplicate key"
+		}
+	]
+}

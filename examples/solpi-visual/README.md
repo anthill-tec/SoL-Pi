@@ -11,7 +11,7 @@ and Blender for scene reconstruction.
 From the SoL-Pi repository root:
 
 ```bash
-npm ci --ignore-scripts
+bun install --frozen-lockfile --ignore-scripts
 export SOLPI_ROOT="$PWD"
 python3 -m venv "$SOLPI_ROOT/.pi/visual-venv"
 source "$SOLPI_ROOT/.pi/visual-venv/bin/activate"
@@ -41,7 +41,7 @@ cd /path/to/scene-project
 
 `--approve` trusts the project; use it only for projects you trust. Configure the
 base SoL-Pi features using the [root README](../../README.md), and select your model
-and authentication through Pi. Tested with Pi 0.85.1.
+and authentication through Pi.
 
 Give the agent a reference video or images and a task, for example:
 

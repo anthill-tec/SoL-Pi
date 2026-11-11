@@ -108,7 +108,7 @@ export async function renderStarHistory(snapshot, theme) {
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
 	try {
 		const [repository = process.env.GITHUB_REPOSITORY, directory] = process.argv.slice(2);
-		if (!repository || !directory) throw new Error("Usage: node scripts/update-star-history.mjs owner/repository output-directory");
+		if (!repository || !directory) throw new Error("Usage: bun scripts/update-star-history.mjs owner/repository output-directory");
 		const snapshot = await fetchStarHistory(repository, { token: process.env.GITHUB_TOKEN });
 		const logo = await fetch(`https://github.com/${repository.split("/")[0]}.png?size=22`, {
 			signal: AbortSignal.timeout(30_000),

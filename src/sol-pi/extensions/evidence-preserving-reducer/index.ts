@@ -55,6 +55,13 @@ function errorName(error: unknown): string | undefined {
 	return isRecord(error) && typeof error.name === "string" ? error.name : undefined;
 }
 
+/** The journal's fallback reason for a reducer model call that threw. */
+function modelCallFallbackReason(name: string | undefined): string {
+	if (name === "AbortError") return "model-call-timeout";
+	if (name === "ReducerModelUnavailableError") return "reducer-model-unavailable";
+	return "model-call-exception";
+}
+
 /**
  * A call another tool made through `executeTool` (a codemode script, for
  * example) carries `parentToolCallId` on pi >= 0.99; older pi never sets it.
@@ -112,16 +119,10 @@ export async function reduceToolResult(
 	try {
 		provider = await callReducer(config, command, event.isError, archive, body, context);
 	} catch (error) {
-		const name = errorName(error);
 		journal("fallback", {
 			toolCallId: event.toolCallId,
 			sourceSha256: archive.hash,
-			reason:
-				name === "AbortError"
-					? "model-call-timeout"
-					: name === "ReducerModelUnavailableError"
-						? "reducer-model-unavailable"
-						: "model-call-exception",
+			reason: modelCallFallbackReason(errorName(error)),
 		});
 		return undefined;
 	}

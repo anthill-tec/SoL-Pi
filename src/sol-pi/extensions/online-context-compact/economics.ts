@@ -168,15 +168,11 @@ export function decideCompaction(input: {
 			? (input.carriedDebtTokens + newDebtTokens) / combinedRepaymentTokens
 			: null;
 	const firstCompaction = input.priorCompactionCount === 0;
-	const effectiveHorizonRequests =
-		horizon === null
-			? null
-			: firstCompaction
-				? Math.min(
-						horizon.expectedRemainingRequests * input.economics.firstCompactionRequestScale,
-						horizon.windowRequestUpperBound ?? Number.POSITIVE_INFINITY,
-					)
-				: horizon.expectedRemainingRequests;
+	const effectiveHorizonRequests = effectiveHorizon(
+		horizon,
+		firstCompaction,
+		input.economics.firstCompactionRequestScale,
+	);
 	const windowProtection =
 		input.contextWindowTokens !== null &&
 		input.contextTokens >= input.contextWindowTokens - input.economics.windowReserveTokens;
@@ -236,22 +232,58 @@ export function decideCompaction(input: {
 		carriedDebtTokens: input.carriedDebtTokens,
 		cacheDebtRepaymentTokens: input.cacheDebtRepaymentTokens,
 		compact,
-		reason: !compressible
-			? "non_positive_saving"
-			: windowProtection
-				? "window_protection"
-				: economic && cooldownActive
-					? "deferred_post_compaction_cooldown"
-					: economic
-					? "economic"
-					: horizon === null
-						? "horizon_unavailable"
-						: breakevenRequests === null
-							? "cache_ratio_unavailable"
-							: !firstCompaction && baseEconomic && !subsequentMarginOpen
-								? "deferred_subsequent_margin"
-								: !firstCompaction && baseEconomic && !carriedDebtGateOpen
-									? "deferred_carried_debt"
-									: "deferred_economic",
+		reason: compactionReason({
+			compressible,
+			windowProtection,
+			economic,
+			cooldownActive,
+			horizonAvailable: horizon !== null,
+			breakevenAvailable: breakevenRequests !== null,
+			firstCompaction,
+			baseEconomic,
+			subsequentMarginOpen,
+			carriedDebtGateOpen,
+		}),
 	};
+}
+
+/**
+ * The request horizon a compaction is priced against: the first compaction's
+ * horizon is scaled and capped by the context window; later ones use it as is.
+ */
+function effectiveHorizon(
+	horizon: RequestHorizonEstimate | null,
+	firstCompaction: boolean,
+	firstCompactionRequestScale: number,
+): number | null {
+	if (horizon === null) return null;
+	if (!firstCompaction) return horizon.expectedRemainingRequests;
+	return Math.min(
+		horizon.expectedRemainingRequests * firstCompactionRequestScale,
+		horizon.windowRequestUpperBound ?? Number.POSITIVE_INFINITY,
+	);
+}
+
+/** The first gate, in precedence order, that decided a compaction. */
+function compactionReason(gates: {
+	readonly compressible: boolean;
+	readonly windowProtection: boolean;
+	readonly economic: boolean;
+	readonly cooldownActive: boolean;
+	readonly horizonAvailable: boolean;
+	readonly breakevenAvailable: boolean;
+	readonly firstCompaction: boolean;
+	readonly baseEconomic: boolean;
+	readonly subsequentMarginOpen: boolean;
+	readonly carriedDebtGateOpen: boolean;
+}): CompactionReason {
+	if (!gates.compressible) return "non_positive_saving";
+	if (gates.windowProtection) return "window_protection";
+	if (gates.economic) return gates.cooldownActive ? "deferred_post_compaction_cooldown" : "economic";
+	if (!gates.horizonAvailable) return "horizon_unavailable";
+	if (!gates.breakevenAvailable) return "cache_ratio_unavailable";
+	const laterBaseEconomic = !gates.firstCompaction && gates.baseEconomic;
+	if (laterBaseEconomic && !gates.subsequentMarginOpen) return "deferred_subsequent_margin";
+	if (laterBaseEconomic && !gates.carriedDebtGateOpen) return "deferred_carried_debt";
+	return "deferred_economic";
 }

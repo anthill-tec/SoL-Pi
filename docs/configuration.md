@@ -12,6 +12,19 @@ For the official Pi distribution, the first two locations normally resolve to `.
 
 The project file replaces the global file. SoL-Pi does not merge them.
 
+The extension follows Pi's configuration and agent directories as Pi reports them. The `sol-pi-axi` command supports the official Pi layout only: `<project>/.pi/sol-pi.json`, and the agent directory `$PI_CODING_AGENT_DIR` when non-empty (a leading `~` expanded), else `~/.pi/agent`.
+
+## Writing a project file with `sol-pi-axi setup`
+
+A project file is read only in a trusted project: after writing it, start Pi in the project and trust it.
+
+`sol-pi-axi setup <project dir>` writes `<project dir>/.pi/sol-pi.json` and nothing else. It chooses its values in this order:
+
+1. The base values: a valid project file's effective values; else the agent directory's `sol-pi.json`, read with the same rules (it is not read when a project file exists); else the setup defaults — all four mechanisms on, `cacheWriteReadRatio` 12.5, and the reducer on Pi's `defaultProvider` and `defaultModel` from the agent directory's `settings.json`.
+2. The flags override them: `--features` (`all`, `none`, or a comma list; unlisted mechanisms off), `--reducer <provider>/<model>`, `--cache-ratio <number>`. With no value flag, a valid project file is left `unchanged`.
+
+Without `--interactive`, `settings.json` is read only when the setup defaults enable the reducer and no `--reducer` is given; with `--interactive`, its `enabledModels` is also read for the reducer prompt's suggestions. Its `defaultProvider` and `defaultModel` count only when both are non-empty strings without whitespace. When the reducer is enabled and neither they nor `--reducer` name its route, the run fails and names `--reducer`; with the reducer off, the built-in route is written. An invalid file the run needs fails it and is left untouched. The file is written with every key in `sol-pi.example.json`'s order.
+
 ## Schema
 
 ```json
@@ -32,7 +45,7 @@ Feature keys may be omitted and then default to `false`. `cacheWriteReadRatio` m
 For the managed all-enabled installation described in the [agent installation and configuration protocol](../agents-install.md), validate the effective file before starting Pi:
 
 ```bash
-node scripts/check-sol-pi-config.mjs \
+bun scripts/check-sol-pi-config.mjs \
   --config /absolute/path/to/effective/sol-pi.json \
   --require-all-enabled
 ```
@@ -67,7 +80,7 @@ The configured ratio stays fixed for the loaded extension. The mechanism stores 
 
 ## Pi integration
 
-SoL-Pi reads no dedicated environment variables. Evidence-Preserving Reducer resolves its configured reducer provider/model through `ExtensionContext.modelRegistry` and uses Pi-managed authentication. If the configured reducer model is unavailable or the nested model call fails, the original tool result continues unchanged.
+The extension reads one environment variable, `SOL_PI_AXI_VERIFY`, only to answer `sol-pi-axi verify` (it sends the load signal that check waits for); the `sol-pi-axi` command reads `PI_CODING_AGENT_DIR` to find the agent directory. Evidence-Preserving Reducer resolves its configured reducer provider/model through `ExtensionContext.modelRegistry` and uses Pi-managed authentication. If the configured reducer model is unavailable or the nested model call fails, the original tool result continues unchanged.
 
 SoL-Pi does not configure shell paths, command prefixes, storage paths, run IDs, provider URLs, reasoning levels, timeouts, or per-mechanism enable flags through environment variables. Apart from the EPR reducer provider/model route in `sol-pi.json`, model selection remains with Pi. Action Fusion uses Pi's built-in Bash execution, with `shellPath` and `shellCommandPrefix` inherited from Pi's file-backed settings at extension startup. Global settings apply everywhere; project settings override them only after project trust. Malformed settings stop initialization rather than silently selecting a different shell. Persistent artifacts are derived from Pi's session directory and session ID.
 

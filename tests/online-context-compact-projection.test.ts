@@ -6,19 +6,14 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
-import * as piApi from "@earendil-works/pi-coding-agent";
 import { estimateTokens, sessionEntryToContextMessages, type SessionEntry } from "@earendil-works/pi-coding-agent";
 import { fauxAssistantMessage, fauxToolCall } from "@earendil-works/pi-ai/providers/faux";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "bun:test";
 import { createObservationPackExtension } from "../src/sol-pi/extensions/observation-pack/index.ts";
 import { createOnlineContextCompactExtension, estimateNativeCompactionTokens } from "../src/sol-pi/extensions/online-context-compact/extension.ts";
 import { decideCompaction, DEFAULT_COMPACTION_ECONOMICS } from "../src/sol-pi/extensions/online-context-compact/economics.ts";
 import { projectedEntryTokens } from "../src/sol-pi/extensions/online-context-compact/projection.ts";
-import { FakePi, FakeSessionManager, fakeToolContext } from "./helpers.ts";
-
-const buildProjection = (piApi as unknown as {
-	buildSessionProjection?: (entries: SessionEntry[]) => { messages: AgentMessage[] };
-}).buildSessionProjection;
+import { buildSessionProjection as buildProjection, FakePi, FakeSessionManager, fakeToolContext } from "./helpers.ts";
 
 const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true }))); });
@@ -51,10 +46,12 @@ describe("ObservationPack and OCC savings", () => {
 			projected = await pi.emitContext(messages, ctx);
 			await pi.emit("before_provider_request", {}, ctx);
 		}
-		expect(projected[2]).toMatchObject({ content: [{ type: "text", text: expect.stringContaining("large tool result replaced") }] });
+		// Bun 1.4.4's toMatchObject writes an asymmetric matcher into the received object, so every
+		// value derived from `projected` is computed before the assertion reads it.
 		const raw = estimateNativeCompactionTokens(manager.getBranch(), 20_000);
 		const visible = estimateNativeCompactionTokens(manager.getBranch(), 20_000, projected);
 		const writeTokens = projected.reduce((total, message) => total + estimateTokens(message), 1_000);
+		expect(projected[2]).toMatchObject({ content: [{ type: "text", text: expect.stringContaining("large tool result replaced") }] });
 		expect(raw).toBeGreaterThan(writeTokens);
 		expect(visible).toBeGreaterThan(0);
 		expect(visible).toBeLessThan(1_000);

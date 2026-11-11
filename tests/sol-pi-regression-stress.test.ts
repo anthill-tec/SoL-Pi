@@ -7,8 +7,8 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AssistantMessage, Context, Model } from "@earendil-works/pi-ai";
-import type { ExtensionContext, ToolResultEvent } from "@earendil-works/pi-coding-agent";
-import { describe, expect, it } from "vitest";
+import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
+import { describe, expect, it } from "bun:test";
 import { archiveBody } from "../src/sol-pi/extensions/evidence-preserving-reducer/archive.ts";
 import {
 	createEvidencePreservingReducerExtension,
@@ -19,7 +19,7 @@ import {
 	callReducer,
 	type CompatComplete,
 } from "../src/sol-pi/extensions/evidence-preserving-reducer/provider.ts";
-import { FakePi, FakeSessionManager, fakeContext } from "./helpers.ts";
+import { bashEvent, contextInput, FakePi, FakeSessionManager, fakeContext, sourceHash } from "./helpers.ts";
 
 const ACTIVE_MODEL = {
 	id: ["gpt-5.6", "sol"].join("-"),
@@ -58,19 +58,6 @@ interface CapturedCall {
 	readonly options: Record<string, unknown>;
 }
 
-function contextInput(context: Context): string {
-	const message = context.messages[0];
-	if (message?.role !== "user") throw new Error("reducer request omitted its user message");
-	if (typeof message.content === "string") return message.content;
-	return message.content.flatMap((item) => (item.type === "text" ? [item.text] : [])).join("\n");
-}
-
-function sourceHash(input: string): string {
-	const match = input.match(/source_sha256=([a-f0-9]{64})/u);
-	if (!match?.[1]) throw new Error("request omitted source hash");
-	return match[1];
-}
-
 function reducerComplete(onCall: (call: CapturedCall) => void): Complete {
 	return async (model, context, options = {}) => {
 		onCall({ model, options });
@@ -104,18 +91,6 @@ function reducerComplete(onCall: (call: CapturedCall) => void): Complete {
 			timestamp: Date.now(),
 		};
 	};
-}
-
-function bashEvent(body: string, toolCallId: string): ToolResultEvent {
-	return {
-		type: "tool_result",
-		toolName: "bash",
-		toolCallId,
-		input: { command: "pytest -q" },
-		content: [{ type: "text", text: body }],
-		details: undefined,
-		isError: true,
-	} as ToolResultEvent;
 }
 
 describe("SoL-Pi regression stress", () => {
@@ -186,7 +161,7 @@ describe("SoL-Pi regression stress", () => {
 				});
 				const body = `ERROR stress failure\ncase=${i}\n${"diagnostic line\n".repeat(360 + (i % 20))}`;
 
-				expect(await pi.emit("tool_result", bashEvent(body, `call-${i}`), context)).toBeUndefined();
+				expect(await pi.emit("tool_result", bashEvent(body, { toolCallId: `call-${i}` }), context)).toBeUndefined();
 				expect(calls).toBe(0);
 				expect(manager.customEntryData()).toContainEqual(
 					expect.objectContaining({ kind: "fallback", reason: "reducer-model-unavailable" }),
