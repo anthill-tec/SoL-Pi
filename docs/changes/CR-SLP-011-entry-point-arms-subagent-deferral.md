@@ -1,6 +1,6 @@
 # CR-SLP-011 — The packaged extension arms Online Context Compact's sub-agent deferral
 
-**Status:** PENDING · Pre-review: ran — touches another project's surface (pi-subagents' published service); reported by Crucible's Mainline, Sandesh message #1606
+**Status:** COMPLETED (shipped 2026-11-11 on hotfix/0.1.1) · Pre-review: ran — touches another project's surface (pi-subagents' published service); reported by Crucible's Mainline, Sandesh message #1606
 **Type:** defect
 **Priority:** P0 — in 0.1.0 a boundary compaction stops every running background sub-agent; both customers are on a workaround
 **Depends on:** CR-SLP-006
@@ -86,33 +86,33 @@ configuration that enables only Online Context Compact. Under `createSolPiExtens
 take `keepRecentTokens` from the session's `compaction` settings and use a configuration with
 `cacheWriteReadRatio: 0`, because `registerOnlineContextCompact` forwards only the ratio.
 
-- [ ] **§S1** Every scenario of `tests/online-context-compact-subagents.test.ts` runs under both
+- [x] **§S1** Every scenario of `tests/online-context-compact-subagents.test.ts` runs under both
       registrations and passes: deferral while `hasRunning()` is true; the `turn_start` abort
       listener; the captured service kept when the slot is replaced or deleted after
       `session_start`; no deferral when the economics do not compact; compaction unchanged with no
       service, with no `hasRunning` function and with `hasRunning()` false; deferral when
       `hasRunning()` throws or returns a non-boolean; compaction at the next step after a deferral;
       the notice in `tui` mode and none in `print`, `json` and `rpc` modes.
-- [ ] **§S1** Under both registrations, with no service in the slot at `session_start` and a
+- [x] **§S1** Under both registrations, with no service in the slot at `session_start` and a
       service whose `hasRunning()` is true published afterwards, the step completion compacts and
       that service's `hasRunning()` is never called.
-- [ ] **§S1** Under both registrations, service A (`hasRunning()` true) is in the slot at the first
+- [x] **§S1** Under both registrations, service A (`hasRunning()` true) is in the slot at the first
       `session_start`; the slot is then replaced by service B (`hasRunning()` false) and a second
       `session_start` is delivered to the same extension instance. A favourable step completion is
       still deferred, and B's `hasRunning()` is never called.
-- [ ] **§S1** With a configuration that disables Online Context Compact, `registerConfiguredFeatures`
+- [x] **§S1** With a configuration that disables Online Context Compact, `registerConfiguredFeatures`
       does not read the slot (a getter placed on the slot is never called).
-- [ ] **§S1** The comments on `subagentsRunning` and `captureSubagentsProbe` name both capture
+- [x] **§S1** The comments on `subagentsRunning` and `captureSubagentsProbe` name both capture
       points, and a comment at `registerConfiguredFeatures` states the missed-first-event rule.
-- [ ] **§S1** Without the change to `registerConfiguredFeatures`, the scenarios that expect a
+- [x] **§S1** Without the change to `registerConfiguredFeatures`, the scenarios that expect a
       deferral fail under the `createSolPiExtension` registration (the RED evidence).
-- [ ] **§S1** `git grep -n -E "(from|import\()\s*[\"']@gotgenes/pi-subagents" -- src` returns
+- [x] **§S1** `git grep -n -E "(from|import\()\s*[\"']@gotgenes/pi-subagents" -- src` returns
       nothing, and `package.json` has no `@gotgenes/pi-subagents` entry.
-- [ ] **§S2** `docs/compatibility.md` states that the packaged extension captures the service
+- [x] **§S2** `docs/compatibility.md` states that the packaged extension captures the service
       while it registers its features during `session_start`, and no longer says that Online
       Context Compact always captures at its own first `session_start`; `CHANGELOG.md`
       `[Unreleased]` records the fix under Fixed.
-- [ ] **Gate** `pre-merge-gate` passes for both stacks.
+- [x] **Gate** `pre-merge-gate` passes for both stacks.
 
 ## Estimated size
 
