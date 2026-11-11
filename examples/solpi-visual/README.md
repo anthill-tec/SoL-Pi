@@ -41,7 +41,7 @@ cd /path/to/scene-project
 
 `--approve` trusts the project; use it only for projects you trust. Configure the
 base SoL-Pi features using the [root README](../../README.md), and select your model
-and authentication through Pi. Tested with Pi 0.85.1.
+and authentication through Pi.
 
 Give the agent a reference video or images and a task, for example:
 

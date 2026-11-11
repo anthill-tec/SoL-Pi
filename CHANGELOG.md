@@ -103,6 +103,8 @@ All notable changes to this project are documented in this file. The format is b
   user's ESC and stopped every background sub-agent. The compaction is deferred to the next
   completed step, recorded as a `sol-pi-online-context-compact-deferred` entry and, in the TUI,
   shown as an info notice.
+- The savings status timer no longer outlives its session: it is cleared at `session_shutdown`,
+  and a timer that fires on a stale context does nothing.
 
 [Unreleased]: https://github.com/anthill-tec/SoL-Pi/compare/0.1.0...HEAD
 [0.1.0]: https://github.com/anthill-tec/SoL-Pi/releases/tag/0.1.0

@@ -88,7 +88,7 @@ sol-pi-axi install
 pi list --approve
 ```
 
-`sol-pi-axi install` registers `npm:@anthill-tec/sol-pi@<version>` with Pi and writes the agent directory's `sol-pi.json` with the setup defaults when it has none (see "Registering the extension with `sol-pi-axi install`" below). Then configure each project with `sol-pi-axi setup <project dir>` (Phase 3).
+`sol-pi-axi install` registers `npm:@anthill-tec/sol-pi@<version>` with Pi and writes the agent directory's `sol-pi.json` with the setup defaults when it has none (see "Registering the extension with `sol-pi-axi install`" below). On a Pi with no `defaultProvider` and `defaultModel` in its `settings.json` (a Pi never started), give the reducer's route, `sol-pi-axi install --reducer <provider>/<model>`, or leave the reducer off with `--features actionFusion,observationPack,onlineContextCompact`; otherwise the run fails and names `--reducer`. Then configure each project with `sol-pi-axi setup <project dir>` (Phase 3).
 
 Alternatively, register the extension with Pi directly, from npm:
 
@@ -167,7 +167,7 @@ Exit status: exit code 0 for `written`, `unchanged` and the home view; 1 for `fa
 
 Before the confirmation, a prompted run is cancelled by declining it, Ctrl+C, Ctrl+D on an empty line or `SIGINT` (exit 130), `SIGTERM` (143) or a closed terminal, `SIGHUP` (129). These cancel exit codes are an addition to AXI's exit codes 0, 1 and 2; the run prints a `cancelled` envelope, writes and registers nothing, and leaves no temporary file.
 
-The project file replaces the user-wide file; the two are not merged. If both exist, inspect them and obtain direction before changing either one. Unknown keys, unsupported versions, malformed JSON, non-boolean feature values, invalid reducer model fields, and invalid ratios must remain fatal.
+The project file replaces the user-wide file; the two are not merged. After `sol-pi-axi install` the agent directory's file exists and a project's file replaces it; if a file you did not write exists at either location, inspect it and obtain direction before changing it. Unknown keys, unsupported versions, malformed JSON, non-boolean feature values, invalid reducer model fields, and invalid ratios must remain fatal.
 
 Do not put provider URL, credentials, shell path, command prefix, storage path, or run ID in `sol-pi.json`. SoL-Pi either reads those values from Pi or derives them from the Pi session.
 

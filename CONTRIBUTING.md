@@ -21,6 +21,13 @@ bun run check
 bun audit --audit-level=high
 ```
 
+The `sol-pi-axi` tests need Python 3.14 and run against an editable install of the checkout:
+
+```bash
+python -m pip install -e ".[dev]"
+PI_BIN=node_modules/.bin/pi python -m unittest discover -s tests -t .
+```
+
 Then register the checkout with Pi, user-wide or, from a trusted project, project-locally:
 
 ```bash

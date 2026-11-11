@@ -132,4 +132,4 @@ keeps `~/.sol-pi/runs/<id>/` with `prompt.md` (exactly what SoL-Pi received),
   config into `$TMPDIR/sol-pi-<uid>/`; `doctor` prints which one it uses.
 - Transcript formats are internal to Claude Code and Codex and may change. If an
   export looks wrong, run `sol-pi-context | head` from inside the session.
-- Tested with Pi 0.85.1.
+- Runs on the Pi release pinned in this repository's `package.json`.
