@@ -5,6 +5,7 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { DEFAULT_CACHE_WRITE_READ_RATIO } from "../../config.ts";
 import { createOnlineContextCompactExtension } from "./extension.ts";
+import type { SubagentsProbe } from "./subagents.ts";
 
 export {
 	DEFAULT_COMPACTION_ECONOMICS,
@@ -43,8 +44,9 @@ export type { PlanProgress, PlanUpdateInput } from "./tools.ts";
 export function registerOnlineContextCompact(
 	pi: ExtensionAPI,
 	cacheWriteReadRatio = DEFAULT_CACHE_WRITE_READ_RATIO,
+	subagentsRunning?: SubagentsProbe,
 ): void {
-	createOnlineContextCompactExtension({ cacheWriteReadRatio })(pi);
+	createOnlineContextCompactExtension({ cacheWriteReadRatio, subagentsRunning })(pi);
 }
 
 export default registerOnlineContextCompact;

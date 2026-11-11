@@ -56,6 +56,13 @@ export const COMPACTION_FAILED_RESUME_REMINDER =
 export type OnlineContextCompactOptions = {
 	readonly cacheWriteReadRatio?: number | null;
 	readonly keepRecentTokens?: number;
+	/**
+	 * The sub-agents probe, already captured by the caller. The packaged entry point captures it
+	 * while it registers the features during session_start: this extension's own session_start
+	 * handler, registered during that delivery, does not run for that event. Without it, the
+	 * extension captures at its own first session_start, as when it is registered alone.
+	 */
+	readonly subagentsRunning?: SubagentsProbe;
 };
 
 type PendingBoundary = { readonly toolCallId: string; readonly stepId: string };
@@ -166,8 +173,10 @@ export function createOnlineContextCompactExtension(options: OnlineContextCompac
 		let compactionInFlight = false;
 		let requestPending = false;
 		let compactionRefused = false;
-		// Captured at the instance's first session_start and never re-read; see subagents.ts.
-		let subagentsRunning: SubagentsProbe | undefined;
+		// Captured once and never re-read: by the packaged entry point while it registers the features
+		// during session_start, or at this instance's first session_start when the extension is
+		// registered alone. The first probe held is kept; see subagents.ts.
+		let subagentsRunning: SubagentsProbe | undefined = options.subagentsRunning;
 
 		const releaseContinuation = (): void => {
 			const continuation = nextContinuation;

@@ -27,6 +27,24 @@ const CUSTOM_REDUCER = {
 	maxTokens: 4_096,
 } satisfies Model<"openai-responses">;
 
+/** Where `@gotgenes/pi-subagents` 25.0.5 publishes its service; Online Context Compact's probe reads it. */
+const SUBAGENTS_SERVICE_SLOT = Symbol.for("@gotgenes/pi-subagents:service");
+
+/**
+ * Puts a getter on the slot that counts every read and answers with a running service, runs `body`,
+ * then removes the getter so no other test sees it.
+ */
+async function withObservedSlot(body: (slotReads: ReturnType<typeof vi.fn>) => void | Promise<void>): Promise<void> {
+	const service = { hasRunning: () => true, abortAll: () => 0 };
+	const slotReads = vi.fn(() => service);
+	Object.defineProperty(globalThis, SUBAGENTS_SERVICE_SLOT, { configurable: true, get: slotReads });
+	try {
+		await body(slotReads);
+	} finally {
+		delete (globalThis as Record<symbol, unknown>)[SUBAGENTS_SERVICE_SLOT];
+	}
+}
+
 describe("SoL-Pi entrypoint", () => {
 	it("registers no tools or events when every feature is disabled", () => {
 		const pi = new FakePi();
@@ -61,6 +79,45 @@ describe("SoL-Pi entrypoint", () => {
 			"tool_result",
 			"turn_end",
 		]);
+	});
+
+	const withoutOnlineContextCompact = [
+		["every feature is disabled", DEFAULT_CONFIG, []],
+		[
+			"Online Context Compact is disabled and every other feature is enabled",
+			{ ...DEFAULT_CONFIG, actionFusion: true, observationPack: true, evidencePreservingReducer: true },
+			["edit", "write", "obs_recall"],
+		],
+	] as const;
+	for (const [label, config, tools] of withoutOnlineContextCompact) {
+		it(`does not read the pi-subagents service slot when ${label}`, async () => {
+			await withObservedSlot((slotReads) => {
+				const pi = new FakePi();
+				registerConfiguredFeatures(pi.asExtensionApi(), config);
+
+				expect(pi.registeredTools.map((tool) => tool.name)).toEqual([...tools]);
+				expect(slotReads).not.toHaveBeenCalled();
+			});
+			expect(Object.getOwnPropertyDescriptor(globalThis, SUBAGENTS_SERVICE_SLOT)).toBeUndefined();
+		});
+	}
+
+	it("reads the pi-subagents service slot exactly once while registering an enabled Online Context Compact, and not again at session_start", async () => {
+		await withObservedSlot(async (slotReads) => {
+			const pi = new FakePi();
+			registerConfiguredFeatures(pi.asExtensionApi(), { ...DEFAULT_CONFIG, onlineContextCompact: true });
+
+			expect(pi.registeredTools.map((tool) => tool.name)).toEqual(["update_plan"]);
+			// Captured while the features are registered, which the entry point does inside session_start.
+			expect(slotReads).toHaveBeenCalledTimes(1);
+
+			const ctx = fakeContext(pi.sessionManager);
+			await pi.emit("session_start", { type: "session_start" }, ctx);
+			await pi.emit("session_start", { type: "session_start" }, ctx);
+			// Online Context Compact keeps the probe it was given: a later session_start reads nothing.
+			expect(slotReads).toHaveBeenCalledTimes(1);
+		});
+		expect(Object.getOwnPropertyDescriptor(globalThis, SUBAGENTS_SERVICE_SLOT)).toBeUndefined();
 	});
 
 	it("waits for a trusted session context and initializes once", async () => {
