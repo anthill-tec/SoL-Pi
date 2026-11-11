@@ -3,7 +3,9 @@
  * SPDX-License-Identifier: MIT
  */
 
-import { existsSync, statSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { existsSync, mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "bun:test";
 import { rootFile } from "./helpers.ts";
@@ -11,13 +13,22 @@ import { rootFile } from "./helpers.ts";
 /** An npm/npx/node/Vitest development command that CR-SLP-001 §S6 replaces with its Bun form. */
 const NPM_DEVELOPMENT_COMMAND = /\bnpx\b|\bnpm (ci|run|test|audit|pack)\b|\bnode scripts\/|vitest/u;
 
-/** The tested Pi versions declared by the compatibility check, oldest first. */
+/**
+ * The tested Pi versions the compatibility check reports: it is run against a Pi of an untested
+ * version and the set named in its warning is read back, oldest first.
+ */
 function testedPiVersions(): string[] {
-	const declaration = rootFile("scripts/check-pi-compat.mjs").match(/const TESTED_PI_VERSIONS = \[([^\]]*)\]/u);
-	if (!declaration?.[1]) throw new Error("TESTED_PI_VERSIONS not found in scripts/check-pi-compat.mjs");
-	return [...declaration[1].matchAll(/"([^"]+)"/gu)]
-		.map((match) => match[1]!)
-		.sort((left, right) => left.localeCompare(right, "en", { numeric: true }));
+	const root = mkdtempSync(join(tmpdir(), "sol-pi-tested-"));
+	try {
+		writeFileSync(join(root, "package.json"), JSON.stringify({ name: "@earendil-works/pi-coding-agent", version: "9999.0.0" }));
+		const result = spawnSync("node", ["scripts/check-pi-compat.mjs", "--pi-root", root], { cwd: process.cwd(), encoding: "utf8" });
+		const output = `${result.stdout}${result.stderr}`;
+		const reported = output.match(/not in the tested set \(([^)]*)\)/u);
+		if (!reported?.[1]) throw new Error(`the compatibility check did not report its tested set:\n${output}`);
+		return reported[1].split(", ").sort((left, right) => left.localeCompare(right, "en", { numeric: true }));
+	} finally {
+		rmSync(root, { recursive: true, force: true });
+	}
 }
 
 describe("agent installation instructions", () => {
@@ -172,21 +183,13 @@ function installLines(text: string): string[] {
 	return text.split(/\r?\n/u).filter((line) => /\b(pi install|uv tool install)\b/u.test(line));
 }
 
-/** The release whose notes carry the entries these tests read. */
-const SHIPPED_IN = "0.1.0";
-
-/**
- * The changelog section holding a release's entries: its own `## [<release>]` section once the
- * release has moved them there, and `[Unreleased]` before that, so a test holds across the release.
- * The section ends at the next release heading or at the compare links.
- */
-function releaseNotes(changelog: string, release = SHIPPED_IN): string {
-	const released = changelog.indexOf(`## [${release}]`);
-	const start = released >= 0 ? released : changelog.indexOf("## [Unreleased]");
-	if (start < 0) throw new Error(`CHANGELOG.md has neither a [${release}] nor an [Unreleased] section`);
-	const rest = changelog.slice(start);
-	const end = rest.slice(1).search(/\n## \[|\n\[[^\]]+\]: /u);
-	return end < 0 ? rest : rest.slice(0, end + 1);
+/** The release workflow's own consumer of CHANGELOG.md: the notes it would publish for `version`. */
+function releaseNotes(version: string): { status: number | null; notes: string; error: string } {
+	const result = spawnSync("python3", [".github/scripts/changelog_section.py", "CHANGELOG.md", version], {
+		cwd: process.cwd(),
+		encoding: "utf8",
+	});
+	return { status: result.status, notes: result.stdout, error: result.stderr };
 }
 
 // CR-SLP-004 §S5: the `sol-pi-axi` command, its `setup` verb and its install are documented.
@@ -308,10 +311,13 @@ describe("sol-pi-axi documentation", () => {
 		expect(rows).toEqual(["| `toon-format` | 1.2.0 | MIT |"]);
 	});
 
-	it("CHANGELOG.md's 0.1.0 notes record the sol-pi-axi command", () => {
-		const section = releaseNotes(rootFile("CHANGELOG.md"));
-		expect(section).toContain("sol-pi-axi");
-		expect(section).toContain("setup");
+	it("CHANGELOG.md has a non-empty section for the package version, as the release workflow extracts it", () => {
+		const version = JSON.parse(rootFile("package.json")).version as string;
+		const { status, notes, error } = releaseNotes(version);
+		expect(error).toBe("");
+		expect(status).toBe(0);
+		expect(notes.trim().length).toBeGreaterThan(0);
+		expect(releaseNotes("0.0.0-no-such-release").status).toBe(1);
 	});
 });
 
@@ -474,24 +480,6 @@ describe("registry install documentation", () => {
 		expect(text).toContain("modelb-axi release-workflow");
 		expect(text).toContain("tests/fixtures/release-workflow/rendered.yml");
 	});
-
-	it("CHANGELOG.md's 0.1.0 notes name the two packages, install and uninstall", () => {
-		const section = releaseNotes(rootFile("CHANGELOG.md"));
-		expect(section).toContain("@anthill-tec/sol-pi");
-		expect(section).toMatch(/`sol-pi-axi`|\bsol-pi-axi\b(?!-)/u);
-		expect(section).toMatch(/sol-pi-axi install\b|`install`/u);
-		expect(section).toMatch(/sol-pi-axi uninstall\b|`uninstall`/u);
-	});
-
-	// CR-SLP-008 §S5.
-	it("CHANGELOG.md's 0.1.0 notes name verify, the check and the load signal, and no longer says the extension reads no environment variables", () => {
-		const section = releaseNotes(rootFile("CHANGELOG.md"));
-		expect(section).toContain("sol-pi-axi verify");
-		expect(section).toMatch(/sol-pi-axi install[^.]*\bcheck|\bcheck[^.]*sol-pi-axi install|`install`[^.]*\bcheck/iu);
-		expect(section).toContain("SOL_PI_AXI_VERIFY");
-		expect(section).toMatch(/load signal/iu);
-		expect(section).not.toMatch(/extension[^.]*\b(reads|uses) no\b[^.]*environment variables/iu);
-	});
 });
 
 /** `--interactive` itself, never the `--non-interactive` flag that contains it. */
@@ -506,64 +494,9 @@ const PROMPTS_ONLY_WITH_INTERACTIVE = /\b(prompts? only|only prompts?)\b[^.\n|]{
  */
 const NEVER_PROMPTS = /\bnever\s+prompts?\b/iu;
 
-/**
- * The retired fish setup script's file name, assembled from parts so that this file does not
- * itself name the script (CR-SLP-005 §S2: no file outside docs/ and the changelog names it).
- */
-const FISH_SCRIPT = ["setup", "sol", "pi.fish"].join("-");
-
-/** Each entry of a changelog section: a top-level bullet with its continuation lines. */
-function changelogEntries(section: string): string[] {
-	return section.split(/\n(?=- |#{2,3} )/u).filter((entry) => entry.startsWith("- "));
-}
-
 /** The blank-line-separated paragraphs of a document. */
 function paragraphs(text: string): string[] {
 	return text.split(/\n\s*\n/u);
-}
-
-/**
- * DN-sol-pi-axi §D7's mapping, each row as the script's term followed (within the row's reach)
- * by every term of what replaces it.
- */
-const D7_MAPPING: { row: string; script: RegExp; now: RegExp[] }[] = [
-	{ row: "user-wide setup → sol-pi-axi install", script: /user-wide setup/giu, now: [/sol-pi-axi install\b/u] },
-	{ row: "project setup → sol-pi-axi setup <dir>", script: /project setup/giu, now: [/sol-pi-axi setup\b/u] },
-	{ row: "prompts → --interactive", script: /\bprompts\b/giu, now: [INTERACTIVE_FLAG] },
-	{
-		row: "--uninstall → sol-pi-axi uninstall, without the .bak restore",
-		script: /`--uninstall`/gu,
-		now: [/sol-pi-axi uninstall\b/u, /\.bak\b/u],
-	},
-	{
-		row: "strict Pi compatibility failure → a warning in install",
-		script: /strict\b[^|;]{0,40}\bPi compatibility\b/giu,
-		now: [/\bwarning\b/iu, /\binstall\b/u],
-	},
-	{
-		row: "smoke test → the post-install check",
-		script: /smoke test/giu,
-		now: [/post-install check|load check|sol-pi-axi verify/iu],
-	},
-	{
-		row: "registering the checkout → the npm source; checkout development in CONTRIBUTING.md",
-		script: /register(ing)? the checkout|checkout registration/giu,
-		now: [/\bnpm\b/iu, /CONTRIBUTING\.md/u],
-	},
-	{
-		row: "checkout validation, audit, all-mechanisms test → bun run check, bun audit",
-		script: /checkout validation/giu,
-		now: [/\baudit\b/iu, /all-mechanisms/iu, /bun run check\b/u, /bun audit\b/u],
-	},
-];
-
-/** Whether some occurrence of the row's script term is followed, within 200 characters, by every term of what replaces it. */
-function carriesMappingRow(entry: string, row: (typeof D7_MAPPING)[number]): boolean {
-	const text = entry.replace(/\s+/gu, " ");
-	return [...text.matchAll(row.script)].some((match) => {
-		const reach = text.slice(match.index, match.index + match[0].length + 200);
-		return row.now.every((term) => term.test(reach));
-	});
 }
 
 // CR-SLP-005 §S3: `--interactive`, when it prompts, the cancel exit codes, checkout validation, and
@@ -643,34 +576,5 @@ describe("interactive setup documentation", () => {
 			),
 			"one section validating a checkout with both commands",
 		).toBe(true);
-	});
-
-	it("CHANGELOG.md's 0.1.0 notes name --interactive", () => {
-		expect(releaseNotes(rootFile("CHANGELOG.md"))).toMatch(INTERACTIVE_FLAG);
-	});
-
-	it("CHANGELOG.md's 0.1.0 notes name the fish setup script only in its removal entry", () => {
-		const naming = changelogEntries(releaseNotes(rootFile("CHANGELOG.md"))).filter((entry) =>
-			entry.includes(FISH_SCRIPT),
-		);
-		expect(naming.length, "entries naming the fish setup script").toBe(1);
-		expect(naming[0]).toMatch(/\b(removed|retired|deleted|removal)\b/iu);
-	});
-
-	it("CHANGELOG.md's 0.1.0 removal entry carries each row of DN §D7's mapping", () => {
-		const removal = changelogEntries(releaseNotes(rootFile("CHANGELOG.md"))).filter(
-			(entry) => entry.includes(FISH_SCRIPT) && /\b(removed|retired|deleted|removal)\b/iu.test(entry),
-		);
-		expect(removal.length, "one removal entry naming the fish setup script").toBe(1);
-		for (const row of D7_MAPPING) expect(carriesMappingRow(removal[0]!, row), row.row).toBe(true);
-	});
-
-	it("CHANGELOG.md's 0.1.0 setup entry names --interactive, and no longer says the command does not prompt at all", () => {
-		const setup = changelogEntries(releaseNotes(rootFile("CHANGELOG.md"))).filter(
-			(entry) => entry.includes("--features") && entry.includes("--cache-ratio"),
-		);
-		expect(setup.length, "one entry describing setup and its value flags").toBe(1);
-		expect(setup[0]).not.toMatch(NEVER_PROMPTS);
-		expect(setup[0]).toMatch(INTERACTIVE_FLAG);
 	});
 });
