@@ -3,6 +3,13 @@
  * SPDX-License-Identifier: MIT
  */
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
+import type { Context } from "@earendil-works/pi-ai";
+import {
+	fauxAssistantMessage,
+	fauxText,
+	fauxToolCall,
+	type FauxResponseStep,
+} from "@earendil-works/pi-ai/providers/faux";
 import * as piCodingAgent from "@earendil-works/pi-coding-agent";
 import {
 	createBashToolDefinition,
@@ -10,6 +17,7 @@ import {
 	type ExtensionContext,
 	type ExtensionFactory,
 	type SessionEntry,
+	type SessionManager,
 	type Theme,
 	type ToolDefinition,
 } from "@earendil-works/pi-coding-agent";
@@ -407,4 +415,80 @@ export async function settleWorkerExits(): Promise<void> {
 	while (workerExits.length > 0) await Promise.all(workerExits.splice(0));
 	if (originalTerminate) Worker.prototype.terminate = originalTerminate;
 	originalTerminate = undefined;
+}
+
+/** A file at the repository root (the test run's working directory), as text. */
+export function rootFile(name: string): string {
+	return readFileSync(join(process.cwd(), name), "utf8");
+}
+
+/** The text of a reducer request's user message. */
+export function contextInput(context: Context): string {
+	const message = context.messages[0];
+	if (message?.role !== "user") throw new Error("reducer request omitted its user message");
+	if (typeof message.content === "string") return message.content;
+	return message.content.flatMap((item) => (item.type === "text" ? [item.text] : [])).join("\n");
+}
+
+/** The `source_sha256` a reducer request carries. */
+export function sourceHash(input: string): string {
+	const match = input.match(/source_sha256=([a-f0-9]{64})/u);
+	if (!match?.[1]) throw new Error("request omitted source hash");
+	return match[1];
+}
+
+/** One open plan step, the same step completed, and the progress reported with it. */
+export const OPEN = [{ id: "build", goal: "build it", status: "in_progress" }] as const;
+export const DONE = [{ id: "build", goal: "build it", status: "completed" }] as const;
+export const PROGRESS = {
+	files_changed: ["src/a.ts"],
+	verification: ["tests passed"],
+	decisions: ["kept the implementation small"],
+};
+
+/** Faux model turns that open the plan step and then complete it: one Online Context Compact boundary. */
+export function boundaryResponses(ordinal: number, workText?: string): FauxResponseStep[] {
+	const openPlan = fauxToolCall("update_plan", { steps: OPEN }, { id: `plan-open-${ordinal}` });
+	return [
+		fauxAssistantMessage(workText === undefined ? openPlan : [fauxText(workText), openPlan], { stopReason: "toolUse" }),
+		fauxAssistantMessage(
+			fauxToolCall("update_plan", { steps: DONE, progress: PROGRESS }, { id: `plan-done-${ordinal}` }),
+			{ stopReason: "toolUse" },
+		),
+	];
+}
+
+/** The compaction entries on the session's current branch. */
+export function compactions(sessionManager: SessionManager): number {
+	return sessionManager.getBranch().filter((entry) => entry.type === "compaction").length;
+}
+
+export type Notification = readonly [message: string, level: string | undefined];
+
+/** An extension UI that records every `notify` call and does nothing else. */
+export function recordingUi(notifications: Notification[]) {
+	const noop = () => undefined;
+	return {
+		notify: (message: string, level?: string) => void notifications.push([message, level]),
+		setStatus: noop,
+		setWorkingMessage: noop,
+		setWorkingVisible: noop,
+		setWorkingIndicator: noop,
+		setHiddenThinkingLabel: noop,
+		setWidget: noop,
+		setFooter: noop,
+		setHeader: noop,
+		setTitle: noop,
+		onTerminalInput: () => noop,
+		select: async () => undefined,
+		confirm: async () => false,
+		input: async () => undefined,
+		editor: async () => undefined,
+		custom: async () => undefined,
+		pasteToEditor: noop,
+		setEditorText: noop,
+		getEditorText: () => "",
+		getToolsExpanded: () => false,
+		setToolsExpanded: noop,
+	};
 }

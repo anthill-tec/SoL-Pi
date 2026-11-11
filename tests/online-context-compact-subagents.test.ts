@@ -16,8 +16,6 @@ import {
 import {
 	fauxAssistantMessage,
 	fauxProvider,
-	fauxText,
-	fauxToolCall,
 	type FauxResponseStep,
 } from "@earendil-works/pi-ai/providers/faux";
 import { afterEach, beforeEach, describe, expect, it, vi } from "bun:test";
@@ -26,20 +24,13 @@ import {
 	createOnlineContextCompactExtension,
 	POST_COMPACTION_PLAN_REMINDER,
 } from "../src/sol-pi/extensions/online-context-compact/extension.ts";
-import { waitFor } from "./helpers.ts";
+import { boundaryResponses, compactions, recordingUi, waitFor, type Notification } from "./helpers.ts";
 
 /** Where `@gotgenes/pi-subagents` 25.0.5 publishes its service (`publishSubagentsService`). */
 const SUBAGENTS_SERVICE_SLOT = Symbol.for("@gotgenes/pi-subagents:service");
 const DEFERRED_ENTRY = "sol-pi-online-context-compact-deferred";
 const DEFERRED_NOTICE = "Online compaction deferred: sub-agents are running";
 
-const OPEN = [{ id: "build", goal: "build it", status: "in_progress" }] as const;
-const DONE = [{ id: "build", goal: "build it", status: "completed" }] as const;
-const PROGRESS = {
-	files_changed: ["src/a.ts"],
-	verification: ["tests passed"],
-	decisions: ["kept the implementation small"],
-};
 const COMPACTION = { enabled: false, keepRecentTokens: 150, reserveTokens: 1_024 };
 
 /** Pi's run mode as `bindExtensions` takes it (the package does not export `ExtensionMode`). */
@@ -58,35 +49,6 @@ function clearServiceSlot(): void {
 /** A stand-in for pi-subagents' published service: only the surface SoL-Pi may probe, plus abortAll. */
 function fakeService(hasRunning: () => unknown) {
 	return { hasRunning: vi.fn(hasRunning), abortAll: vi.fn(() => 0) };
-}
-
-type Notification = readonly [message: string, level: string | undefined];
-
-function recordingUi(notifications: Notification[]) {
-	const noop = () => undefined;
-	return {
-		notify: (message: string, level?: string) => void notifications.push([message, level]),
-		setStatus: noop,
-		setWorkingMessage: noop,
-		setWorkingVisible: noop,
-		setWorkingIndicator: noop,
-		setHiddenThinkingLabel: noop,
-		setWidget: noop,
-		setFooter: noop,
-		setHeader: noop,
-		setTitle: noop,
-		onTerminalInput: () => noop,
-		select: async () => undefined,
-		confirm: async () => false,
-		input: async () => undefined,
-		editor: async () => undefined,
-		custom: async () => undefined,
-		pasteToEditor: noop,
-		setEditorText: noop,
-		getEditorText: () => "",
-		getToolsExpanded: () => false,
-		setToolsExpanded: noop,
-	};
 }
 
 /**
@@ -252,17 +214,6 @@ async function withScenario(options: ScenarioOptions, body: (run: ScenarioRun) =
 	}
 }
 
-function boundaryResponses(ordinal: number, workText?: string): FauxResponseStep[] {
-	const openPlan = fauxToolCall("update_plan", { steps: OPEN }, { id: `plan-open-${ordinal}` });
-	return [
-		fauxAssistantMessage(workText === undefined ? openPlan : [fauxText(workText), openPlan], { stopReason: "toolUse" }),
-		fauxAssistantMessage(
-			fauxToolCall("update_plan", { steps: DONE, progress: PROGRESS }, { id: `plan-done-${ordinal}` }),
-			{ stopReason: "toolUse" },
-		),
-	];
-}
-
 /** One completed step whose economics favour compaction, then the model's final reply. */
 function singleBoundary(finalReply: string): FauxResponseStep[] {
 	return [...boundaryResponses(1), fauxAssistantMessage(finalReply)];
@@ -274,10 +225,6 @@ function deferredEntries(sessionManager: SessionManager): Record<string, unknown
 		.flatMap((entry) =>
 			entry.type === "custom" && entry.customType === DEFERRED_ENTRY ? [entry.data as Record<string, unknown>] : [],
 		);
-}
-
-function compactions(sessionManager: SessionManager): number {
-	return sessionManager.getBranch().filter((entry) => entry.type === "compaction").length;
 }
 
 function reminders(sessionManager: SessionManager, content: string): number {

@@ -12,7 +12,7 @@ import { describe, expect, it, vi } from "bun:test";
 import { DEFAULT_CONFIG } from "../src/sol-pi/config.ts";
 import { REDUCER_RECEIPT_SCHEMA } from "../src/sol-pi/extensions/evidence-preserving-reducer/index.ts";
 import { createSolPiExtension, registerConfiguredFeatures } from "../src/sol-pi/index.ts";
-import { FakePi, fakeContext } from "./helpers.ts";
+import { contextInput, FakePi, fakeContext, sourceHash } from "./helpers.ts";
 
 const CUSTOM_REDUCER = {
 	id: "configured-reducer-model",
@@ -26,19 +26,6 @@ const CUSTOM_REDUCER = {
 	contextWindow: 32_768,
 	maxTokens: 4_096,
 } satisfies Model<"openai-responses">;
-
-function contextInput(context: Context): string {
-	const message = context.messages[0];
-	if (message?.role !== "user") throw new Error("reducer request omitted its user message");
-	if (typeof message.content === "string") return message.content;
-	return message.content.flatMap((item) => (item.type === "text" ? [item.text] : [])).join("\n");
-}
-
-function sourceHash(input: string): string {
-	const match = input.match(/source_sha256=([a-f0-9]{64})/u);
-	if (!match?.[1]) throw new Error("request omitted source hash");
-	return match[1];
-}
 
 function bashEvent(body: string): ToolResultEvent {
 	return {

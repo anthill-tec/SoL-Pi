@@ -3,13 +3,10 @@
  * SPDX-License-Identifier: MIT
  */
 
-import { existsSync, readFileSync, statSync } from "node:fs";
+import { existsSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "bun:test";
-
-function rootFile(name: string): string {
-	return readFileSync(join(process.cwd(), name), "utf8");
-}
+import { rootFile } from "./helpers.ts";
 
 /** An npm/npx/node/Vitest development command that CR-SLP-001 §S6 replaces with its Bun form. */
 const NPM_DEVELOPMENT_COMMAND = /\bnpx\b|\bnpm (ci|run|test|audit|pack)\b|\bnode scripts\/|vitest/u;

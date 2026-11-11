@@ -28,15 +28,17 @@ import {
 	POST_COMPACTION_PLAN_REMINDER,
 } from "../src/sol-pi/extensions/online-context-compact/extension.ts";
 import { ONLINE_STATE_ENTRY } from "../src/sol-pi/extensions/online-context-compact/state.ts";
-import { createCodemodeExtension, settleWorkerExits, trackWorkerExits } from "./helpers.ts";
+import {
+	boundaryResponses,
+	compactions,
+	createCodemodeExtension,
+	DONE,
+	OPEN,
+	PROGRESS,
+	settleWorkerExits,
+	trackWorkerExits,
+} from "./helpers.ts";
 
-const OPEN = [{ id: "build", goal: "build it", status: "in_progress" }] as const;
-const DONE = [{ id: "build", goal: "build it", status: "completed" }] as const;
-const PROGRESS = {
-	files_changed: ["src/a.ts"],
-	verification: ["tests passed"],
-	decisions: ["kept the implementation small"],
-};
 const DEFAULT_COMPACTION = { enabled: false, keepRecentTokens: 150, reserveTokens: 1_024 };
 
 type CompactionRequest = { customInstructions?: string; reason: string };
@@ -183,17 +185,6 @@ async function withScenario(options: ScenarioOptions, body: (run: ScenarioRun) =
 	}
 }
 
-function boundaryResponses(ordinal: number, workText?: string): FauxResponseStep[] {
-	const openPlan = fauxToolCall("update_plan", { steps: OPEN }, { id: `plan-open-${ordinal}` });
-	return [
-		fauxAssistantMessage(workText === undefined ? openPlan : [fauxText(workText), openPlan], { stopReason: "toolUse" }),
-		fauxAssistantMessage(
-			fauxToolCall("update_plan", { steps: DONE, progress: PROGRESS }, { id: `plan-done-${ordinal}` }),
-			{ stopReason: "toolUse" },
-		),
-	];
-}
-
 function slowFinalReply(text: string): FauxResponseStep {
 	return async () => {
 		await new Promise((resolve) => setTimeout(resolve, 80));
@@ -249,10 +240,6 @@ function declaredTools(context: unknown): DeclaredTool[] {
 		for (const tool of system.toolsAdded ?? []) declared.set(tool.name, tool);
 	}
 	return [...declared.values()];
-}
-
-function compactions(sessionManager: SessionManager): number {
-	return sessionManager.getBranch().filter((entry) => entry.type === "compaction").length;
 }
 
 async function runCompactionScenario(requestedCompactions: 1 | 2): Promise<void> {

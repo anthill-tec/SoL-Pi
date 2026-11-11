@@ -19,7 +19,7 @@ import {
 	callReducer,
 	type CompatComplete,
 } from "../src/sol-pi/extensions/evidence-preserving-reducer/provider.ts";
-import { FakePi, FakeSessionManager, fakeContext } from "./helpers.ts";
+import { contextInput, FakePi, FakeSessionManager, fakeContext, sourceHash } from "./helpers.ts";
 
 const ACTIVE_MODEL = {
 	id: ["gpt-5.6", "sol"].join("-"),
@@ -56,19 +56,6 @@ type Complete = (
 interface CapturedCall {
 	readonly model: Model<string>;
 	readonly options: Record<string, unknown>;
-}
-
-function contextInput(context: Context): string {
-	const message = context.messages[0];
-	if (message?.role !== "user") throw new Error("reducer request omitted its user message");
-	if (typeof message.content === "string") return message.content;
-	return message.content.flatMap((item) => (item.type === "text" ? [item.text] : [])).join("\n");
-}
-
-function sourceHash(input: string): string {
-	const match = input.match(/source_sha256=([a-f0-9]{64})/u);
-	if (!match?.[1]) throw new Error("request omitted source hash");
-	return match[1];
 }
 
 function reducerComplete(onCall: (call: CapturedCall) => void): Complete {
