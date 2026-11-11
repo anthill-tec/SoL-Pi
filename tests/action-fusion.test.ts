@@ -17,12 +17,12 @@ import {
 } from "../src/sol-pi/extensions/action-fusion/index.ts";
 import { withFusedFileQueue } from "../src/sol-pi/extensions/action-fusion/file-queue.ts";
 import { runFusedMutation } from "../src/sol-pi/extensions/action-fusion/then-run.ts";
+import { loadFusedTools } from "./action-fusion-support.ts";
 import {
 	bashReturnsNonZeroExit,
 	componentText,
 	createTempDir,
 	fakeToolContext,
-	loadFusedTools,
 	plainTheme,
 	type ToolExecuteContext,
 } from "./helpers.ts";

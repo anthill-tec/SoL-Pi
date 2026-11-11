@@ -28,7 +28,7 @@ import { fauxProvider } from "@earendil-works/pi-ai/providers/faux";
 // instead of failing the whole file at module load.
 import * as actionFusion from "../src/sol-pi/extensions/action-fusion/index.ts";
 import { DEFAULT_CONFIG } from "../src/sol-pi/config.ts";
-import { loadFusedTools } from "./helpers.ts";
+import { loadFusedTools } from "./action-fusion-support.ts";
 
 type FusedToolName = "edit" | "write";
 type ObjectSchema = { properties: Record<string, { description?: string }> };
