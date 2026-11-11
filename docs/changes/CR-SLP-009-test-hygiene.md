@@ -1,6 +1,6 @@
 # CR-SLP-009 — Test hygiene for 0.1.0
 
-**Status:** PENDING · Pre-review: not triggered — tests only, no other project's surface
+**Status:** COMPLETED (shipped 2026-11-11 on develop) · Pre-review: not triggered — tests only, no other project's surface
 **Type:** maintenance
 **Priority:** P1 — the release's test-hygiene CR; 0.1.0 starts only after it
 **Depends on:** CR-SLP-001, CR-SLP-002, CR-SLP-003, CR-SLP-004, CR-SLP-005, CR-SLP-006, CR-SLP-007, CR-SLP-008
@@ -53,6 +53,8 @@ helpers.
   needed, serves every caller without changing what any test asserts; otherwise it stays, and the
   commit message names why.
 - No test's name, count or assertion changes.
+- `loadFusedTools`, which imports production code, lives in its own support module, which only the
+  action-fusion suites load, not in `tests/helpers.ts`.
 
 ### §S3 — Capability guards that cannot hide a lost capability
 
@@ -61,6 +63,8 @@ helpers.
 - The capability guards stay, so the suite still runs against older Pi.
 - A new test asserts that, with the development dependency's Pi, every capability those guards
   probe is present, so none of them skips; it names the capability that is missing.
+- It reads the development dependency's Pi version from `package.json` and names no Pi version
+  itself, so a pin change needs no edit to it.
 - The platform guards stay unchanged.
 
 ### §S4 — The whitespace test without 63 processes
@@ -99,8 +103,8 @@ helpers.
   stays.
 - [ ] **§S2** The Bun and Python test counts are unchanged by §S1, §S2 and §S4; the new tests of
   §S3 and §S5 are the only additions.
-- [ ] **§S3** The new test passes with Pi 1.5.0, and fails naming the capability when a probe
-  reports it missing.
+- [ ] **§S3** The new test passes with the pinned Pi, names no Pi version, and fails naming the
+  capability when a probe reports it missing.
 - [ ] **§S4** The whitespace test checks every character at every position in process, starts 9
   `sol-pi-axi` processes, and takes under 1.5 s.
 - [ ] **§S5** Both tier tests pass; each fails naming the module when a process-starting test file

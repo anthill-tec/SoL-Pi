@@ -46,28 +46,17 @@ from tests.sol_pi_axi_stub_pi import (
 )
 from tests.sol_pi_axi_support import (
     REPO,
+    SIGNAL_IN_PARSE,
     assert_clean_streams,
     cli_environ,
     decode_envelope,
+    development_pi,
     import_sut,
     snapshot,
     venv_script,
 )
 
 EXIT_CODES = {signal.SIGINT: 130, signal.SIGTERM: 143, signal.SIGHUP: 129}
-#: Runs `sol-pi-axi <argv[1:]>` in-process with `_parse` wrapped to send the process the signal
-#: `SOL_PI_AXI_TEST_SIGNAL` names first.
-SIGNAL_IN_PARSE = '''\
-import os, signal, sys
-from sol_pi_axi import cli
-_parse = cli._parse
-def parse(args):
-    os.kill(os.getpid(), int(os.environ["SOL_PI_AXI_TEST_SIGNAL"]))
-    return _parse(args)
-cli._parse = parse
-sys.argv = ["sol-pi-axi", *sys.argv[1:]]
-sys.exit(cli.main())
-'''
 #: Runs `sol-pi-axi <argv[1:]>` in-process with `sol_pi_axi.check.run_check` raising an unexpected
 #: error.
 CHECK_RAISES = '''\
@@ -84,14 +73,6 @@ GET_STATE = {"id": "sol-pi-axi", "type": "get_state"}
 INSTALL = "sol-pi-axi install"
 UNINSTALL = "sol-pi-axi uninstall"
 CHECKOUT_EXTENSION = Path("src") / "sol-pi" / "index.ts"
-
-
-def development_pi() -> Path:
-    """The development dependency's `pi`: `$PI_BIN` when set (relative to the repository), else
-    `node_modules/.bin/pi`."""
-    configured = os.environ.get("PI_BIN") or "node_modules/.bin/pi"
-    path = Path(configured)
-    return path if path.is_absolute() else REPO / path
 
 
 def process_alive(pid: int | None) -> bool:

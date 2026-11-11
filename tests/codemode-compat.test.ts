@@ -19,7 +19,6 @@ import {
 	fauxToolCall,
 	type FauxResponseStep,
 } from "@earendil-works/pi-ai/providers/faux";
-import * as piCodingAgent from "@earendil-works/pi-coding-agent";
 import {
 	createAgentSession,
 	DefaultResourceLoader,
@@ -37,20 +36,21 @@ import {
 	REDUCER_RECEIPT_SCHEMA,
 } from "../src/sol-pi/extensions/evidence-preserving-reducer/index.ts";
 import { THRESHOLD_BYTES } from "../src/sol-pi/extensions/observation-pack/index.ts";
-import { settleWorkerExits, trackWorkerExits } from "./helpers.ts";
+import {
+	createCodemodeExtension,
+	declaredTools,
+	settleWorkerExits,
+	trackWorkerExits,
+	wireText,
+	type DeclaredTool,
+} from "./helpers.ts";
 import {
 	BOUNDARY_COMPACTION_INSTRUCTIONS,
 	POST_COMPACTION_PLAN_REMINDER,
 } from "../src/sol-pi/extensions/online-context-compact/extension.ts";
 import { createSolPiExtension } from "../src/sol-pi/index.ts";
 
-/** Pi 1.0 codemode; Pi 0.84.2 does not ship it. */
-const createCodemodeExtension = (piCodingAgent as unknown as Record<string, unknown>).createCodemodeExtension as
-	| ((options: { mode: "on" | "only" }) => ExtensionFactory)
-	| undefined;
-
 type CodemodeMode = "on" | "only";
-type DeclaredTool = { name: string; description?: string; parameters?: { properties?: Record<string, unknown> } };
 type WireMessage = {
 	role: string;
 	toolCallId?: string;
@@ -82,32 +82,11 @@ function diagnosticCommand(exitCode: number): string {
 	].join(" ");
 }
 
-function wireText(message: WireMessage | undefined): string {
-	if (!message) return "";
-	if (typeof message.content === "string") return message.content;
-	if (!Array.isArray(message.content)) return "";
-	return (message.content as { type: string; text?: string }[])
-		.flatMap((block) => (block.type === "text" && block.text !== undefined ? [block.text] : []))
-		.join("\n");
-}
-
 /** The same string hash the recall script computes inside the QuickJS sandbox. */
 function djb2(value: string): number {
 	let hash = 5381;
 	for (let index = 0; index < value.length; index++) hash = ((hash * 33) ^ value.charCodeAt(index)) >>> 0;
 	return hash;
-}
-
-/** Tools declared to the model: `context.tools` plus Pi 1.0 tool-declaration system messages. */
-function declaredTools(context: { messages?: readonly unknown[]; tools?: readonly unknown[] }): DeclaredTool[] {
-	const declared = new Map<string, DeclaredTool>();
-	for (const tool of (context.tools ?? []) as DeclaredTool[]) declared.set(tool.name, tool);
-	for (const message of (context.messages ?? []) as WireMessage[]) {
-		if (message.role !== "system") continue;
-		for (const tool of message.toolsRemoved ?? []) declared.delete(typeof tool === "string" ? tool : tool.name);
-		for (const tool of message.toolsAdded ?? []) declared.set(tool.name, tool);
-	}
-	return [...declared.values()];
 }
 
 function codemodeSection(description: string, name: string): string | undefined {
@@ -240,7 +219,7 @@ async function runCombinedSession(mode: CodemodeMode) {
 		(label: string, respond: (messages: WireMessage[]) => ReturnType<typeof fauxAssistantMessage>): FauxResponseStep =>
 		(context) => {
 			const messages = JSON.parse(JSON.stringify(context.messages)) as WireMessage[];
-			const tools = declaredTools(JSON.parse(JSON.stringify(context)) as { messages?: unknown[]; tools?: unknown[] });
+			const tools = declaredTools(JSON.parse(JSON.stringify(context)), { contextTools: true });
 			requests.push({ label, prompt, messages, tools });
 			return respond(messages);
 		};

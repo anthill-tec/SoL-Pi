@@ -6,7 +6,6 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
-import * as piApi from "@earendil-works/pi-coding-agent";
 import { estimateTokens, sessionEntryToContextMessages, type SessionEntry } from "@earendil-works/pi-coding-agent";
 import { fauxAssistantMessage, fauxToolCall } from "@earendil-works/pi-ai/providers/faux";
 import { afterEach, describe, expect, it, vi } from "bun:test";
@@ -14,11 +13,7 @@ import { createObservationPackExtension } from "../src/sol-pi/extensions/observa
 import { createOnlineContextCompactExtension, estimateNativeCompactionTokens } from "../src/sol-pi/extensions/online-context-compact/extension.ts";
 import { decideCompaction, DEFAULT_COMPACTION_ECONOMICS } from "../src/sol-pi/extensions/online-context-compact/economics.ts";
 import { projectedEntryTokens } from "../src/sol-pi/extensions/online-context-compact/projection.ts";
-import { FakePi, FakeSessionManager, fakeToolContext } from "./helpers.ts";
-
-const buildProjection = (piApi as unknown as {
-	buildSessionProjection?: (entries: SessionEntry[]) => { messages: AgentMessage[] };
-}).buildSessionProjection;
+import { buildSessionProjection as buildProjection, FakePi, FakeSessionManager, fakeToolContext } from "./helpers.ts";
 
 const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true }))); });

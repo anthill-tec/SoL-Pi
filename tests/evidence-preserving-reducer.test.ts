@@ -23,7 +23,15 @@ import {
 	type CompatComplete,
 } from "../src/sol-pi/extensions/evidence-preserving-reducer/provider.ts";
 import { runtimeRoot } from "../src/sol-pi/runtime-paths.ts";
-import { FakePi, FakeSessionManager, fakeContext, fakeToolContext } from "./helpers.ts";
+import {
+	bashEvent,
+	contextInput,
+	FakePi,
+	FakeSessionManager,
+	fakeContext,
+	fakeToolContext,
+	sourceHash,
+} from "./helpers.ts";
 
 const cleanupPaths: string[] = [];
 
@@ -82,19 +90,6 @@ async function storeRoot(): Promise<string> {
 	const value = await mkdtemp(join(tmpdir(), "evidence-preserving-reducer-test-"));
 	cleanupPaths.push(value);
 	return value;
-}
-
-function bashEvent(body: string, overrides: Partial<ToolResultEvent> = {}): ToolResultEvent {
-	return {
-		type: "tool_result",
-		toolName: "bash",
-		toolCallId: "call-1",
-		input: { command: "pytest -q" },
-		content: [{ type: "text", text: body }],
-		details: undefined,
-		isError: true,
-		...overrides,
-	} as ToolResultEvent;
 }
 
 function fusedEvent(body: string, failed: boolean): ToolResultEvent {
@@ -167,19 +162,6 @@ async function runRealBash(command: string, root: string): Promise<ToolResultEve
 			isError: true,
 		} as ToolResultEvent;
 	}
-}
-
-function contextInput(context: Context): string {
-	const message = context.messages[0];
-	if (message?.role !== "user") throw new Error("reducer request omitted its user message");
-	if (typeof message.content === "string") return message.content;
-	return message.content.flatMap((item) => (item.type === "text" ? [item.text] : [])).join("\n");
-}
-
-function sourceHash(input: string): string {
-	const match = input.match(/source_sha256=([a-f0-9]{64})/u);
-	if (!match?.[1]) throw new Error("request omitted source hash");
-	return match[1];
 }
 
 function modelComplete(

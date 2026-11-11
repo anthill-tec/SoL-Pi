@@ -3,9 +3,28 @@
  * SPDX-License-Identifier: MIT
  */
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
-import type { ExtensionAPI, ExtensionContext, SessionEntry, Theme, ToolDefinition } from "@earendil-works/pi-coding-agent";
+import type { Context } from "@earendil-works/pi-ai";
+import {
+	fauxAssistantMessage,
+	fauxText,
+	fauxToolCall,
+	type FauxResponseStep,
+} from "@earendil-works/pi-ai/providers/faux";
+import * as piCodingAgent from "@earendil-works/pi-coding-agent";
+import {
+	createBashToolDefinition,
+	type ExtensionAPI,
+	type ExtensionContext,
+	type ExtensionFactory,
+	type SessionEntry,
+	type SessionManager,
+	type Theme,
+	type ToolDefinition,
+	type ToolResultEvent,
+} from "@earendil-works/pi-coding-agent";
 import type { Component } from "@earendil-works/pi-tui";
 import { readFileSync } from "node:fs";
+import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -235,6 +254,36 @@ export function fakeToolContext(
 	} as unknown as ToolExecuteContext;
 }
 
+/*
+ * Capability probes of the installed Pi. The suite's capability guards skip on what these report
+ * missing, so it still runs against the older Pi the peer range admits; `pi-capabilities.test.ts`
+ * asserts that the development dependency's Pi has every one of them.
+ */
+
+/** Pi 1.0 codemode; Pi 0.84.2 does not ship it. */
+export const createCodemodeExtension = (piCodingAgent as unknown as Record<string, unknown>).createCodemodeExtension as
+	| ((options: { mode: "on" | "only" }) => ExtensionFactory)
+	| undefined;
+
+/** Pi's session projection, edits applied; Pi 0.84.2 does not ship it. */
+export const buildSessionProjection = (piCodingAgent as unknown as {
+	buildSessionProjection?: (entries: SessionEntry[]) => { messages: AgentMessage[] };
+}).buildSessionProjection;
+
+/**
+ * Pi 0.99 changed bash to return a non-zero exit as an `isError` result; 0.84
+ * throws. Detected from the installed bash, not from a version string.
+ */
+export async function bashReturnsNonZeroExit(): Promise<boolean> {
+	const bash = createBashToolDefinition(tmpdir(), { operations: { exec: async () => ({ exitCode: 7 }) } });
+	try {
+		await bash.execute("probe", { command: "exit 7" }, undefined, undefined, fakeToolContext(tmpdir(), { cwd: tmpdir() }));
+		return true;
+	} catch {
+		return false;
+	}
+}
+
 export function fakeContext(
 	sessionManager: FakeSessionManager | string,
 	overrides: Partial<ExtensionContext> = {},
@@ -368,4 +417,148 @@ export async function settleWorkerExits(): Promise<void> {
 	while (workerExits.length > 0) await Promise.all(workerExits.splice(0));
 	if (originalTerminate) Worker.prototype.terminate = originalTerminate;
 	originalTerminate = undefined;
+}
+
+/** A file at the repository root (the test run's working directory), as text. */
+export function rootFile(name: string): string {
+	return readFileSync(join(process.cwd(), name), "utf8");
+}
+
+/** The text of a reducer request's user message. */
+export function contextInput(context: Context): string {
+	const message = context.messages[0];
+	if (message?.role !== "user") throw new Error("reducer request omitted its user message");
+	if (typeof message.content === "string") return message.content;
+	return message.content.flatMap((item) => (item.type === "text" ? [item.text] : [])).join("\n");
+}
+
+/** The `source_sha256` a reducer request carries. */
+export function sourceHash(input: string): string {
+	const match = input.match(/source_sha256=([a-f0-9]{64})/u);
+	if (!match?.[1]) throw new Error("request omitted source hash");
+	return match[1];
+}
+
+/** One open plan step, the same step completed, and the progress reported with it. */
+export const OPEN = [{ id: "build", goal: "build it", status: "in_progress" }] as const;
+export const DONE = [{ id: "build", goal: "build it", status: "completed" }] as const;
+export const PROGRESS = {
+	files_changed: ["src/a.ts"],
+	verification: ["tests passed"],
+	decisions: ["kept the implementation small"],
+};
+
+/** Faux model turns that open the plan step and then complete it: one Online Context Compact boundary. */
+export function boundaryResponses(ordinal: number, workText?: string): FauxResponseStep[] {
+	const openPlan = fauxToolCall("update_plan", { steps: OPEN }, { id: `plan-open-${ordinal}` });
+	return [
+		fauxAssistantMessage(workText === undefined ? openPlan : [fauxText(workText), openPlan], { stopReason: "toolUse" }),
+		fauxAssistantMessage(
+			fauxToolCall("update_plan", { steps: DONE, progress: PROGRESS }, { id: `plan-done-${ordinal}` }),
+			{ stopReason: "toolUse" },
+		),
+	];
+}
+
+/** The compaction entries on the session's current branch. */
+export function compactions(sessionManager: SessionManager): number {
+	return sessionManager.getBranch().filter((entry) => entry.type === "compaction").length;
+}
+
+export type Notification = readonly [message: string, level: string | undefined];
+
+/** An extension UI that records every `notify` call and does nothing else. */
+export function recordingUi(notifications: Notification[]) {
+	const noop = () => undefined;
+	return {
+		notify: (message: string, level?: string) => void notifications.push([message, level]),
+		setStatus: noop,
+		setWorkingMessage: noop,
+		setWorkingVisible: noop,
+		setWorkingIndicator: noop,
+		setHiddenThinkingLabel: noop,
+		setWidget: noop,
+		setFooter: noop,
+		setHeader: noop,
+		setTitle: noop,
+		onTerminalInput: () => noop,
+		select: async () => undefined,
+		confirm: async () => false,
+		input: async () => undefined,
+		editor: async () => undefined,
+		custom: async () => undefined,
+		pasteToEditor: noop,
+		setEditorText: noop,
+		getEditorText: () => "",
+		getToolsExpanded: () => false,
+		setToolsExpanded: noop,
+	};
+}
+
+/** A failed `pytest -q` bash result carrying `body`, with any field replaced by `overrides`. */
+export function bashEvent(body: string, overrides: Partial<ToolResultEvent> = {}): ToolResultEvent {
+	return {
+		type: "tool_result",
+		toolName: "bash",
+		toolCallId: "call-1",
+		input: { command: "pytest -q" },
+		content: [{ type: "text", text: body }],
+		details: undefined,
+		isError: true,
+		...overrides,
+	} as ToolResultEvent;
+}
+
+/** A new temporary directory named with `prefix`, recorded in `tracked` for the caller to remove. */
+export async function createTempDir(prefix: string, tracked: string[]): Promise<string> {
+	const dir = await mkdtemp(join(tmpdir(), prefix));
+	tracked.push(dir);
+	return dir;
+}
+
+/** The text blocks of a provider-request message, joined; a string content as it is. */
+export function wireText(message: { content?: unknown } | undefined): string {
+	if (!message || !Array.isArray(message.content)) return typeof message?.content === "string" ? message.content : "";
+	return (message.content as { type: string; text?: string }[])
+		.flatMap((block) => (block.type === "text" && block.text !== undefined ? [block.text] : []))
+		.join("\n");
+}
+
+export type DeclaredTool = { name: string; description?: string; parameters?: { properties?: Record<string, unknown> } };
+
+/**
+ * Tools declared to the model by Pi 1.0 tool-declaration system messages, after any loadout hook
+ * hid some; with `contextTools`, `context.tools` first.
+ */
+export function declaredTools(context: unknown, { contextTools = false }: { contextTools?: boolean } = {}): DeclaredTool[] {
+	const { messages = [], tools = [] } = context as { messages?: readonly unknown[]; tools?: readonly unknown[] };
+	const declared = new Map<string, DeclaredTool>();
+	if (contextTools) for (const tool of tools as readonly DeclaredTool[]) declared.set(tool.name, tool);
+	for (const message of messages) {
+		const system = message as {
+			role?: string;
+			toolsAdded?: readonly DeclaredTool[];
+			toolsRemoved?: readonly (string | { name: string })[];
+		};
+		if (system.role !== "system") continue;
+		for (const tool of system.toolsRemoved ?? []) declared.delete(typeof tool === "string" ? tool : tool.name);
+		for (const tool of system.toolsAdded ?? []) declared.set(tool.name, tool);
+	}
+	return [...declared.values()];
+}
+
+/**
+ * The Online Context Compact reminders on the session's current branch whose content is `content`;
+ * with `display` given, only those with that display flag.
+ */
+export function reminders(sessionManager: SessionManager, content: string, display?: boolean): number {
+	return sessionManager
+		.getBranch()
+		.filter(
+			(entry) =>
+				entry.type === "custom_message" &&
+				entry.customType === "sol-pi-online-context-compact" &&
+				entry.content === content &&
+				(display === undefined || entry.display === display),
+		).length;
 }

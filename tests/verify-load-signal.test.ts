@@ -24,6 +24,7 @@ import {
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { DEFAULT_CONFIG, type SolPiConfig } from "../src/sol-pi/config.ts";
 import { createSolPiExtension } from "../src/sol-pi/index.ts";
+import { recordingUi, type Notification } from "./helpers.ts";
 
 const VERIFY_ENV = "SOL_PI_AXI_VERIFY";
 const AGENT_DIR_ENV = "PI_CODING_AGENT_DIR";
@@ -37,35 +38,6 @@ const ALL_OFF: SolPiConfig = {
 	evidencePreservingReducer: false,
 	onlineContextCompact: false,
 };
-
-type Notification = readonly [message: string, level: string | undefined];
-
-function recordingUi(notifications: Notification[]) {
-	const noop = () => undefined;
-	return {
-		notify: (message: string, level?: string) => void notifications.push([message, level]),
-		setStatus: noop,
-		setWorkingMessage: noop,
-		setWorkingVisible: noop,
-		setWorkingIndicator: noop,
-		setHiddenThinkingLabel: noop,
-		setWidget: noop,
-		setFooter: noop,
-		setHeader: noop,
-		setTitle: noop,
-		onTerminalInput: () => noop,
-		select: async () => undefined,
-		confirm: async () => false,
-		input: async () => undefined,
-		editor: async () => undefined,
-		custom: async () => undefined,
-		pasteToEditor: noop,
-		setEditorText: noop,
-		getEditorText: () => "",
-		getToolsExpanded: () => false,
-		setToolsExpanded: noop,
-	};
-}
 
 const savedEnv: Record<string, string | undefined> = {};
 const tempDirs: string[] = [];

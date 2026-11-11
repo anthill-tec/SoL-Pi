@@ -15,7 +15,6 @@ import {
 	fauxToolCall,
 	type FauxResponseStep,
 } from "@earendil-works/pi-ai/providers/faux";
-import * as piCodingAgent from "@earendil-works/pi-coding-agent";
 import {
 	createAgentSession,
 	DefaultResourceLoader,
@@ -33,6 +32,7 @@ import {
 } from "../src/sol-pi/extensions/observation-pack/index.ts";
 import {
 	componentText,
+	createCodemodeExtension,
 	FakePi,
 	FakeSessionManager,
 	fakeContext,
@@ -40,6 +40,7 @@ import {
 	plainTheme,
 	settleWorkerExits,
 	trackWorkerExits,
+	wireText,
 } from "./helpers.ts";
 import { runtimeRoot } from "../src/sol-pi/runtime-paths.ts";
 
@@ -492,20 +493,8 @@ describe("observation pack", () => {
 	});
 });
 
-/** Pi 1.0 codemode; Pi 0.84.2 does not ship it. */
-const createCodemodeExtension = (piCodingAgent as unknown as Record<string, unknown>).createCodemodeExtension as
-	| ((options: { mode: "on" | "only" }) => ExtensionFactory)
-	| undefined;
-
 type WireMessage = { role: string; toolCallId?: string; toolName?: string; content?: unknown };
 type SessionMode = "direct" | "on" | "only";
-
-function wireText(message: WireMessage | undefined): string {
-	if (!message || !Array.isArray(message.content)) return typeof message?.content === "string" ? message.content : "";
-	return (message.content as { type: string; text?: string }[])
-		.flatMap((block) => (block.type === "text" && block.text !== undefined ? [block.text] : []))
-		.join("\n");
-}
 
 /**
  * Drive ObservationPack through a real Pi AgentSession, extension runner and

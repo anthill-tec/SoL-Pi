@@ -7,9 +7,8 @@
 // rendering (committed verbatim as `tests/fixtures/release-workflow/rendered.yml`) with a fixed,
 // enumerated set of hand edits. Re-rendering drops the hand edits; these tests catch that.
 
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import { describe, expect, it } from "bun:test";
+import { rootFile } from "./helpers.ts";
 
 type Step = Record<string, unknown> & { name?: string; uses?: string; run?: string; with?: Record<string, unknown>; env?: Record<string, unknown> };
 type Job = Record<string, unknown> & { steps: Step[]; needs?: string[]; permissions?: Record<string, string>; env?: Record<string, unknown> };
@@ -23,10 +22,6 @@ const BUN_VERSION = "1.4.4";
 const DISCOVERY = "python -m unittest discover -s tests -t .";
 /** The values `PI_BIN` may take: the development dependency's `pi`, relative or under the workspace. */
 const PI_BIN_VALUES = ["node_modules/.bin/pi", "${{ github.workspace }}/node_modules/.bin/pi", "$GITHUB_WORKSPACE/node_modules/.bin/pi"];
-
-function rootFile(name: string): string {
-	return readFileSync(join(process.cwd(), name), "utf8");
-}
 
 function parse(text: string): Workflow {
 	return Bun.YAML.parse(text) as Workflow;

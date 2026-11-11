@@ -44,6 +44,7 @@ from tests.sol_pi_axi_stub_pi import (
 )
 from tests.sol_pi_axi_support import (
     REPO,
+    SIGNAL_IN_PARSE,
     assert_clean_streams,
     cli_environ,
     decode_envelope,
@@ -56,19 +57,6 @@ from tests.sol_pi_axi_support import (
 
 SETUP_HELP = "sol-pi-axi setup <project dir>"
 EXIT_CODES = {signal.SIGINT: 130, signal.SIGTERM: 143, signal.SIGHUP: 129}
-#: Runs `sol-pi-axi <argv[1:]>` in-process with `_parse` wrapped to send the process the signal
-#: `SOL_PI_AXI_TEST_SIGNAL` names first — a signal that lands before anything is registered.
-SIGNAL_IN_PARSE = '''\
-import os, signal, sys
-from sol_pi_axi import cli
-_parse = cli._parse
-def parse(args):
-    os.kill(os.getpid(), int(os.environ["SOL_PI_AXI_TEST_SIGNAL"]))
-    return _parse(args)
-cli._parse = parse
-sys.argv = ["sol-pi-axi", *sys.argv[1:]]
-sys.exit(cli.main())
-'''
 #: Runs `sol-pi-axi <argv[2:]>` in-process with `sol_pi_axi._version` replaced, before anything of
 #: the package is imported, by a module whose `__version__` is `argv[1]`.
 WITH_VERSION = '''\
