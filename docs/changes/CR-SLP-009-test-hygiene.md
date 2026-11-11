@@ -1,6 +1,6 @@
 # CR-SLP-009 — Test hygiene for 0.1.0
 
-**Status:** PENDING · Pre-review: not triggered — tests only, no other project's surface
+**Status:** COMPLETED (shipped 2026-11-11 on develop) · Pre-review: not triggered — tests only, no other project's surface
 **Type:** maintenance
 **Priority:** P1 — the release's test-hygiene CR; 0.1.0 starts only after it
 **Depends on:** CR-SLP-001, CR-SLP-002, CR-SLP-003, CR-SLP-004, CR-SLP-005, CR-SLP-006, CR-SLP-007, CR-SLP-008
