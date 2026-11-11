@@ -19,6 +19,7 @@ from pathlib import Path
 
 from tests.sol_pi_axi_support import (
     HOLD_ENV,
+    SIGNAL_IN_PARSE,
     TempTree,
     assert_clean_streams,
     cli_environ,
@@ -51,19 +52,6 @@ while os.path.lexists(_hold):
 sys.path[:] = [entry for entry in sys.path if os.path.abspath(entry or ".") != _shadow]
 del sys.modules[__name__]
 importlib.import_module(__name__)
-'''
-#: Runs `sol-pi-axi <argv[1:]>` in-process with `_parse` wrapped to send the process the signal
-#: `SOL_PI_AXI_TEST_SIGNAL` names first — a signal that lands before the run's work starts.
-SIGNAL_IN_PARSE = '''\
-import os, signal, sys
-from sol_pi_axi import cli
-_parse = cli._parse
-def parse(args):
-    os.kill(os.getpid(), int(os.environ["SOL_PI_AXI_TEST_SIGNAL"]))
-    return _parse(args)
-cli._parse = parse
-sys.argv = ["sol-pi-axi", *sys.argv[1:]]
-sys.exit(cli.main())
 '''
 #: Runs `sol-pi-axi <argv[1:]>` in-process with `os.replace` wrapped to send the process the
 #: signal `SOL_PI_AXI_TEST_SIGNAL` names right after the rename — a signal that lands once the file

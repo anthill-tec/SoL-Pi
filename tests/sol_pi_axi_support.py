@@ -129,6 +129,29 @@ HOLD_ENV = "SOL_PI_AXI_TEST_HOLD"
 #: (import) message.
 FORBIDDEN_OUTPUT = ("Traceback", "No module named", "ModuleNotFoundError", "ImportError")
 
+#: Runs `sol-pi-axi <argv[1:]>` in-process with `_parse` wrapped to send the process the signal
+#: `SOL_PI_AXI_TEST_SIGNAL` names first — a signal that lands before anything is registered and
+#: before the run's work starts.
+SIGNAL_IN_PARSE = '''\
+import os, signal, sys
+from sol_pi_axi import cli
+_parse = cli._parse
+def parse(args):
+    os.kill(os.getpid(), int(os.environ["SOL_PI_AXI_TEST_SIGNAL"]))
+    return _parse(args)
+cli._parse = parse
+sys.argv = ["sol-pi-axi", *sys.argv[1:]]
+sys.exit(cli.main())
+'''
+
+
+def development_pi() -> Path:
+    """The development dependency's `pi`: `$PI_BIN` when set (relative to the repository), else
+    `node_modules/.bin/pi`."""
+    configured = os.environ.get("PI_BIN") or "node_modules/.bin/pi"
+    path = Path(configured)
+    return path if path.is_absolute() else REPO / path
+
 
 def venv_script() -> Path:
     """The `sol-pi-axi` console script of the editable install the tests run under."""

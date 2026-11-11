@@ -13,7 +13,6 @@ import os
 import shutil
 import subprocess
 import unittest
-from pathlib import Path
 
 from tests.sol_pi_axi_stub_pi import (
     NPM_PACKAGE,
@@ -21,7 +20,7 @@ from tests.sol_pi_axi_stub_pi import (
     read_packages,
     write_local_package,
 )
-from tests.sol_pi_axi_support import REPO, cli_environ, snapshot
+from tests.sol_pi_axi_support import cli_environ, development_pi, snapshot
 
 
 class UninstallTestCase(PiCommandTestCase):
@@ -143,14 +142,6 @@ class UninstallStubTest(UninstallTestCase):
         self.assertRegex(envelope["error"], r"\b4\b")
         self.assertIn("stub pi: remove npm:sol-pi failed", result.stderr)
         self.assertEqual(self.packages(), ["npm:sol-pi"])
-
-
-def development_pi() -> Path:
-    """The development dependency's `pi`: `$PI_BIN` when set (relative to the repository), else
-    `node_modules/.bin/pi`."""
-    configured = os.environ.get("PI_BIN") or "node_modules/.bin/pi"
-    path = Path(configured)
-    return path if path.is_absolute() else REPO / path
 
 
 class UninstallRealPiTest(UninstallTestCase):
