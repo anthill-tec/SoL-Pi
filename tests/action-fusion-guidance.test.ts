@@ -18,7 +18,6 @@ import {
 	createEditToolDefinition,
 	createWriteToolDefinition,
 	DefaultResourceLoader,
-	type ExtensionAPI,
 	SessionManager,
 	SettingsManager,
 	type AgentSession,
@@ -29,27 +28,15 @@ import { fauxProvider } from "@earendil-works/pi-ai/providers/faux";
 // instead of failing the whole file at module load.
 import * as actionFusion from "../src/sol-pi/extensions/action-fusion/index.ts";
 import { DEFAULT_CONFIG } from "../src/sol-pi/config.ts";
+import { loadFusedTools } from "./helpers.ts";
 
 type FusedToolName = "edit" | "write";
-type FusedTools = Record<FusedToolName, ToolDefinition>;
 type ObjectSchema = { properties: Record<string, { description?: string }> };
 
 const TOOL_NAMES: readonly FusedToolName[] = ["edit", "write"];
 
 function baseTool(name: FusedToolName, cwd = process.cwd()): ToolDefinition {
 	return (name === "edit" ? createEditToolDefinition(cwd) : createWriteToolDefinition(cwd)) as unknown as ToolDefinition;
-}
-
-function loadFusedTools(): FusedTools {
-	const registered = new Map<string, ToolDefinition>();
-	const pi = {
-		registerTool: (tool: ToolDefinition) => registered.set(tool.name, tool),
-	} as unknown as ExtensionAPI;
-	actionFusion.createActionFusionExtension()(pi);
-	const edit = registered.get("edit");
-	const write = registered.get("write");
-	if (!edit || !write) throw new Error("action fusion did not register edit and write");
-	return { edit, write };
 }
 
 /** The three guidelines SoL-Pi appends after the base tool's own. */

@@ -32,9 +32,11 @@ import {
 	boundaryResponses,
 	compactions,
 	createCodemodeExtension,
+	declaredTools,
 	DONE,
 	OPEN,
 	PROGRESS,
+	reminders,
 	settleWorkerExits,
 	trackWorkerExits,
 } from "./helpers.ts";
@@ -212,36 +214,6 @@ function onlineState(sessionManager: SessionManager): Record<string, unknown> | 
 	return latest?.type === "custom" ? (latest.data as Record<string, unknown>) : undefined;
 }
 
-function reminders(sessionManager: SessionManager, content: string): number {
-	return sessionManager
-		.getBranch()
-		.filter(
-			(entry) =>
-				entry.type === "custom_message" &&
-				entry.customType === "sol-pi-online-context-compact" &&
-				entry.content === content &&
-				entry.display === false,
-		).length;
-}
-
-type DeclaredTool = { readonly name: string; readonly description: string };
-
-/** Tools declared to the model by Pi 1.0 system messages, after any loadout hook hid some. */
-function declaredTools(context: unknown): DeclaredTool[] {
-	const declared = new Map<string, DeclaredTool>();
-	for (const message of (context as { messages?: readonly unknown[] }).messages ?? []) {
-		const system = message as {
-			role?: string;
-			toolsAdded?: readonly DeclaredTool[];
-			toolsRemoved?: readonly (string | { name: string })[];
-		};
-		if (system.role !== "system") continue;
-		for (const tool of system.toolsRemoved ?? []) declared.delete(typeof tool === "string" ? tool : tool.name);
-		for (const tool of system.toolsAdded ?? []) declared.set(tool.name, tool);
-	}
-	return [...declared.values()];
-}
-
 async function runCompactionScenario(requestedCompactions: 1 | 2): Promise<void> {
 	const finalReply = `final reply after ${requestedCompactions} online compaction${requestedCompactions === 1 ? "" : "s"}`;
 	const responses: FauxResponseStep[] = [];
@@ -259,7 +231,7 @@ async function runCompactionScenario(requestedCompactions: 1 | 2): Promise<void>
 			})),
 		);
 		expect(compactions(run.sessionManager)).toBe(requestedCompactions);
-		expect(reminders(run.sessionManager, POST_COMPACTION_PLAN_REMINDER)).toBe(requestedCompactions);
+		expect(reminders(run.sessionManager, POST_COMPACTION_PLAN_REMINDER, false)).toBe(requestedCompactions);
 		expect(run.faux.state.callCount).toBe(requestedCompactions * 2 + 1);
 		expect(run.session.getLastAssistantText()).toBe(finalReply);
 		expect(run.settledCount()).toBe(requestedCompactions + 1);
@@ -297,7 +269,7 @@ describe("Online Context Compact with a real AgentSession", () => {
 					{ customInstructions: BOUNDARY_COMPACTION_INSTRUCTIONS, reason: "manual" },
 				]);
 				expect(compactions(run.sessionManager)).toBe(1);
-				expect(reminders(run.sessionManager, POST_COMPACTION_PLAN_REMINDER)).toBe(1);
+				expect(reminders(run.sessionManager, POST_COMPACTION_PLAN_REMINDER, false)).toBe(1);
 				expect(run.faux.state.callCount).toBe(6);
 				expect(onlineState(run.sessionManager)).toMatchObject({
 					requestCount: 6,
@@ -382,7 +354,7 @@ describe("Online Context Compact with a real AgentSession", () => {
 					{ customInstructions: BOUNDARY_COMPACTION_INSTRUCTIONS, reason: "manual" },
 				]);
 				expect(compactions(run.sessionManager)).toBe(1);
-				expect(reminders(run.sessionManager, POST_COMPACTION_PLAN_REMINDER)).toBe(1);
+				expect(reminders(run.sessionManager, POST_COMPACTION_PLAN_REMINDER, false)).toBe(1);
 				expect(run.faux.state.callCount).toBe(3);
 				expect(run.session.getLastAssistantText()).toBe("final after threshold");
 			},
@@ -405,8 +377,8 @@ describe("Online Context Compact with a real AgentSession", () => {
 					{ customInstructions: BOUNDARY_COMPACTION_INSTRUCTIONS, reason: "manual" },
 				]);
 				expect(compactions(run.sessionManager)).toBe(0);
-				expect(reminders(run.sessionManager, POST_COMPACTION_PLAN_REMINDER)).toBe(0);
-				expect(reminders(run.sessionManager, COMPACTION_FAILED_RESUME_REMINDER)).toBe(1);
+				expect(reminders(run.sessionManager, POST_COMPACTION_PLAN_REMINDER, false)).toBe(0);
+				expect(reminders(run.sessionManager, COMPACTION_FAILED_RESUME_REMINDER, false)).toBe(1);
 				expect(run.session.getLastAssistantText()).toBe("final after failed compaction");
 				expect(run.faux.state.callCount).toBe(4);
 				// The failure itself is still reported once.
@@ -455,8 +427,8 @@ describe("Online Context Compact with a real AgentSession", () => {
 				// The boundary compaction fails; Pi's own threshold compaction then succeeds.
 				expect(run.compactionEnds).toEqual(["threshold:aborted", "manual", "threshold"]);
 				expect(compactions(run.sessionManager)).toBe(1);
-				expect(reminders(run.sessionManager, POST_COMPACTION_PLAN_REMINDER)).toBe(0);
-				expect(reminders(run.sessionManager, COMPACTION_FAILED_RESUME_REMINDER)).toBe(1);
+				expect(reminders(run.sessionManager, POST_COMPACTION_PLAN_REMINDER, false)).toBe(0);
+				expect(reminders(run.sessionManager, COMPACTION_FAILED_RESUME_REMINDER, false)).toBe(1);
 				// Pi's compaction keeps the resume reminder, so the model still sees it and continues once.
 				expect(resumeRequests).toBe(1);
 				expect(run.session.getLastAssistantText()).toBe("final after failed compaction under threshold");
@@ -544,7 +516,7 @@ describe.skipIf(createCodemodeExtension === undefined)("Online Context Compact w
 						{ customInstructions: BOUNDARY_COMPACTION_INSTRUCTIONS, reason: "manual" },
 					]);
 					expect(compactions(run.sessionManager)).toBe(1);
-					expect(reminders(run.sessionManager, POST_COMPACTION_PLAN_REMINDER)).toBe(1);
+					expect(reminders(run.sessionManager, POST_COMPACTION_PLAN_REMINDER, false)).toBe(1);
 					expect(run.faux.state.callCount).toBe(4);
 					expect(run.session.getLastAssistantText()).toBe(`final after codemode ${mode}`);
 					expect(run.settledCount()).toBe(2);

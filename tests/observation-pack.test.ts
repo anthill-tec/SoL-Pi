@@ -40,6 +40,7 @@ import {
 	plainTheme,
 	settleWorkerExits,
 	trackWorkerExits,
+	wireText,
 } from "./helpers.ts";
 import { runtimeRoot } from "../src/sol-pi/runtime-paths.ts";
 
@@ -494,13 +495,6 @@ describe("observation pack", () => {
 
 type WireMessage = { role: string; toolCallId?: string; toolName?: string; content?: unknown };
 type SessionMode = "direct" | "on" | "only";
-
-function wireText(message: WireMessage | undefined): string {
-	if (!message || !Array.isArray(message.content)) return typeof message?.content === "string" ? message.content : "";
-	return (message.content as { type: string; text?: string }[])
-		.flatMap((block) => (block.type === "text" && block.text !== undefined ? [block.text] : []))
-		.join("\n");
-}
 
 /**
  * Drive ObservationPack through a real Pi AgentSession, extension runner and

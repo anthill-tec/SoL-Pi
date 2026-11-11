@@ -2,24 +2,18 @@
  * SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: MIT
  */
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import type { ExtensionAPI, ToolDefinition } from "@earendil-works/pi-coding-agent";
 import { afterEach, describe, expect, it } from "bun:test";
 import { homedir } from "node:os";
-import { fakeToolContext, type ToolExecuteContext } from "./helpers.ts";
+import { createTempDir, fakeToolContext, type ToolExecuteContext } from "./helpers.ts";
 import { normalizeWindowsShellPath, resolveToolPath } from "../src/sol-pi/extensions/action-fusion/file-queue.ts";
 import { createActionFusionExtension, type ActionFusionOptions } from "../src/sol-pi/extensions/action-fusion/index.ts";
 
 const tempDirs: string[] = [];
-
-async function createTempDir(): Promise<string> {
-	const dir = await mkdtemp(join(tmpdir(), "action-fusion-paths-"));
-	tempDirs.push(dir);
-	return dir;
-}
 
 afterEach(async () => {
 	await Promise.all(tempDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
@@ -128,7 +122,7 @@ describe("Action Fusion file URL paths", () => {
 		{ name: "write", prefix: "" }, { name: "edit", prefix: "" },
 		{ name: "write", prefix: "@" }, { name: "edit", prefix: "@" },
 	])("runs then_run after a real $name through an escaped $prefix file URL", async ({ name, prefix }) => {
-		const cwd = await createTempDir();
+		const cwd = await createTempDir("action-fusion-paths-", tempDirs);
 		const target = join(cwd, "space and #hash %.txt");
 		if (name === "edit") await writeFile(target, "before\n");
 		const commands: string[] = [];
@@ -155,7 +149,7 @@ describe("Action Fusion file URL paths", () => {
 	});
 
 	it.each(["write", "edit"])("runs then_run after a real %s through a Unicode-space path", async (name) => {
-		const cwd = await createTempDir();
+		const cwd = await createTempDir("action-fusion-paths-", tempDirs);
 		const target = join(cwd, `${name} space.txt`);
 		if (name === "edit") await writeFile(target, "before\n");
 		const commands: string[] = [];
@@ -182,7 +176,7 @@ describe("Action Fusion file URL paths", () => {
 	});
 
 	it("executes a real bash follow-up after writing through a file URL", async () => {
-		const cwd = await createTempDir();
+		const cwd = await createTempDir("action-fusion-paths-", tempDirs);
 		const target = join(cwd, "real-command.txt");
 		const result = await loadTools().get("write")!.execute("real-command", {
 			path: pathToFileURL(target).href,
@@ -196,7 +190,7 @@ describe("Action Fusion file URL paths", () => {
 	});
 
 	it("serializes a file URL and ordinary path to the same file through then_run", async () => {
-		const cwd = await createTempDir();
+		const cwd = await createTempDir("action-fusion-paths-", tempDirs);
 		const target = join(cwd, "shared file.txt");
 		const events: string[] = [];
 		let signalStarted!: () => void;
@@ -233,7 +227,7 @@ describe("Action Fusion file URL paths", () => {
 	});
 
 	it("does not run a command or create a file for an invalid encoded file URL", async () => {
-		const cwd = await createTempDir();
+		const cwd = await createTempDir("action-fusion-paths-", tempDirs);
 		let mutations = 0;
 		let commands = 0;
 		const tools = loadTools({

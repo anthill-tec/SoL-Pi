@@ -7,12 +7,12 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AssistantMessage, Context, Model } from "@earendil-works/pi-ai";
-import type { ExtensionContext, ToolResultEvent } from "@earendil-works/pi-coding-agent";
+import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { describe, expect, it, vi } from "bun:test";
 import { DEFAULT_CONFIG } from "../src/sol-pi/config.ts";
 import { REDUCER_RECEIPT_SCHEMA } from "../src/sol-pi/extensions/evidence-preserving-reducer/index.ts";
 import { createSolPiExtension, registerConfiguredFeatures } from "../src/sol-pi/index.ts";
-import { contextInput, FakePi, fakeContext, sourceHash } from "./helpers.ts";
+import { bashEvent, contextInput, FakePi, fakeContext, sourceHash } from "./helpers.ts";
 
 const CUSTOM_REDUCER = {
 	id: "configured-reducer-model",
@@ -26,18 +26,6 @@ const CUSTOM_REDUCER = {
 	contextWindow: 32_768,
 	maxTokens: 4_096,
 } satisfies Model<"openai-responses">;
-
-function bashEvent(body: string): ToolResultEvent {
-	return {
-		type: "tool_result",
-		toolName: "bash",
-		toolCallId: "call-configured-reducer",
-		input: { command: "pytest -q" },
-		content: [{ type: "text", text: body }],
-		details: undefined,
-		isError: true,
-	} as ToolResultEvent;
-}
 
 describe("SoL-Pi entrypoint", () => {
 	it("registers no tools or events when every feature is disabled", () => {
@@ -141,7 +129,7 @@ describe("SoL-Pi entrypoint", () => {
 				} as unknown as ExtensionContext["modelRegistry"],
 			});
 
-			const result = (await pi.emit("tool_result", bashEvent(body), context)) as {
+			const result = (await pi.emit("tool_result", bashEvent(body, { toolCallId: "call-configured-reducer" }), context)) as {
 				content: { type: string; text: string }[];
 			};
 

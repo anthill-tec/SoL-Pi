@@ -24,7 +24,7 @@ import {
 	createOnlineContextCompactExtension,
 	POST_COMPACTION_PLAN_REMINDER,
 } from "../src/sol-pi/extensions/online-context-compact/extension.ts";
-import { boundaryResponses, compactions, recordingUi, waitFor, type Notification } from "./helpers.ts";
+import { boundaryResponses, compactions, recordingUi, reminders, waitFor, type Notification } from "./helpers.ts";
 
 /** Where `@gotgenes/pi-subagents` 25.0.5 publishes its service (`publishSubagentsService`). */
 const SUBAGENTS_SERVICE_SLOT = Symbol.for("@gotgenes/pi-subagents:service");
@@ -225,17 +225,6 @@ function deferredEntries(sessionManager: SessionManager): Record<string, unknown
 		.flatMap((entry) =>
 			entry.type === "custom" && entry.customType === DEFERRED_ENTRY ? [entry.data as Record<string, unknown>] : [],
 		);
-}
-
-function reminders(sessionManager: SessionManager, content: string): number {
-	return sessionManager
-		.getBranch()
-		.filter(
-			(entry) =>
-				entry.type === "custom_message" &&
-				entry.customType === "sol-pi-online-context-compact" &&
-				entry.content === content,
-		).length;
 }
 
 /** The step completion ran in-turn: no stop, no compaction, one deferred entry for step "build". */

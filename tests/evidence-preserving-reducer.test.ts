@@ -24,6 +24,7 @@ import {
 } from "../src/sol-pi/extensions/evidence-preserving-reducer/provider.ts";
 import { runtimeRoot } from "../src/sol-pi/runtime-paths.ts";
 import {
+	bashEvent,
 	contextInput,
 	FakePi,
 	FakeSessionManager,
@@ -89,19 +90,6 @@ async function storeRoot(): Promise<string> {
 	const value = await mkdtemp(join(tmpdir(), "evidence-preserving-reducer-test-"));
 	cleanupPaths.push(value);
 	return value;
-}
-
-function bashEvent(body: string, overrides: Partial<ToolResultEvent> = {}): ToolResultEvent {
-	return {
-		type: "tool_result",
-		toolName: "bash",
-		toolCallId: "call-1",
-		input: { command: "pytest -q" },
-		content: [{ type: "text", text: body }],
-		details: undefined,
-		isError: true,
-		...overrides,
-	} as ToolResultEvent;
 }
 
 function fusedEvent(body: string, failed: boolean): ToolResultEvent {

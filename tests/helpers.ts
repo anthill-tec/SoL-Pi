@@ -20,13 +20,19 @@ import {
 	type SessionManager,
 	type Theme,
 	type ToolDefinition,
+	type ToolResultEvent,
 } from "@earendil-works/pi-coding-agent";
 import type { Component } from "@earendil-works/pi-tui";
 import { readFileSync } from "node:fs";
+import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Worker } from "node:worker_threads";
+import {
+	createActionFusionExtension,
+	type ActionFusionOptions,
+} from "../src/sol-pi/extensions/action-fusion/index.ts";
 
 type Handler = (event: unknown, context: ExtensionContext) => unknown | Promise<unknown>;
 
@@ -491,4 +497,85 @@ export function recordingUi(notifications: Notification[]) {
 		getToolsExpanded: () => false,
 		setToolsExpanded: noop,
 	};
+}
+
+/** A failed `pytest -q` bash result carrying `body`, with any field replaced by `overrides`. */
+export function bashEvent(body: string, overrides: Partial<ToolResultEvent> = {}): ToolResultEvent {
+	return {
+		type: "tool_result",
+		toolName: "bash",
+		toolCallId: "call-1",
+		input: { command: "pytest -q" },
+		content: [{ type: "text", text: body }],
+		details: undefined,
+		isError: true,
+		...overrides,
+	} as ToolResultEvent;
+}
+
+/** A new temporary directory named with `prefix`, recorded in `tracked` for the caller to remove. */
+export async function createTempDir(prefix: string, tracked: string[]): Promise<string> {
+	const dir = await mkdtemp(join(tmpdir(), prefix));
+	tracked.push(dir);
+	return dir;
+}
+
+/** The text blocks of a provider-request message, joined; a string content as it is. */
+export function wireText(message: { content?: unknown } | undefined): string {
+	if (!message || !Array.isArray(message.content)) return typeof message?.content === "string" ? message.content : "";
+	return (message.content as { type: string; text?: string }[])
+		.flatMap((block) => (block.type === "text" && block.text !== undefined ? [block.text] : []))
+		.join("\n");
+}
+
+export type DeclaredTool = { name: string; description?: string; parameters?: { properties?: Record<string, unknown> } };
+
+/**
+ * Tools declared to the model by Pi 1.0 tool-declaration system messages, after any loadout hook
+ * hid some; with `contextTools`, `context.tools` first.
+ */
+export function declaredTools(context: unknown, { contextTools = false }: { contextTools?: boolean } = {}): DeclaredTool[] {
+	const { messages = [], tools = [] } = context as { messages?: readonly unknown[]; tools?: readonly unknown[] };
+	const declared = new Map<string, DeclaredTool>();
+	if (contextTools) for (const tool of tools as readonly DeclaredTool[]) declared.set(tool.name, tool);
+	for (const message of messages) {
+		const system = message as {
+			role?: string;
+			toolsAdded?: readonly DeclaredTool[];
+			toolsRemoved?: readonly (string | { name: string })[];
+		};
+		if (system.role !== "system") continue;
+		for (const tool of system.toolsRemoved ?? []) declared.delete(typeof tool === "string" ? tool : tool.name);
+		for (const tool of system.toolsAdded ?? []) declared.set(tool.name, tool);
+	}
+	return [...declared.values()];
+}
+
+/**
+ * The Online Context Compact reminders on the session's current branch whose content is `content`;
+ * with `display` given, only those with that display flag.
+ */
+export function reminders(sessionManager: SessionManager, content: string, display?: boolean): number {
+	return sessionManager
+		.getBranch()
+		.filter(
+			(entry) =>
+				entry.type === "custom_message" &&
+				entry.customType === "sol-pi-online-context-compact" &&
+				entry.content === content &&
+				(display === undefined || entry.display === display),
+		).length;
+}
+
+/** The fused `edit` and `write` tools Action Fusion registers with `options`. */
+export function loadFusedTools(options?: ActionFusionOptions): { edit: ToolDefinition; write: ToolDefinition } {
+	const registered = new Map<string, ToolDefinition>();
+	const pi = {
+		registerTool: (tool: ToolDefinition) => registered.set(tool.name, tool),
+	} as unknown as ExtensionAPI;
+	createActionFusionExtension(options)(pi);
+	const edit = registered.get("edit");
+	const write = registered.get("write");
+	if (!edit || !write) throw new Error("action fusion did not register edit and write");
+	return { edit, write };
 }

@@ -7,7 +7,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AssistantMessage, Context, Model } from "@earendil-works/pi-ai";
-import type { ExtensionContext, ToolResultEvent } from "@earendil-works/pi-coding-agent";
+import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { describe, expect, it } from "bun:test";
 import { archiveBody } from "../src/sol-pi/extensions/evidence-preserving-reducer/archive.ts";
 import {
@@ -19,7 +19,7 @@ import {
 	callReducer,
 	type CompatComplete,
 } from "../src/sol-pi/extensions/evidence-preserving-reducer/provider.ts";
-import { contextInput, FakePi, FakeSessionManager, fakeContext, sourceHash } from "./helpers.ts";
+import { bashEvent, contextInput, FakePi, FakeSessionManager, fakeContext, sourceHash } from "./helpers.ts";
 
 const ACTIVE_MODEL = {
 	id: ["gpt-5.6", "sol"].join("-"),
@@ -93,18 +93,6 @@ function reducerComplete(onCall: (call: CapturedCall) => void): Complete {
 	};
 }
 
-function bashEvent(body: string, toolCallId: string): ToolResultEvent {
-	return {
-		type: "tool_result",
-		toolName: "bash",
-		toolCallId,
-		input: { command: "pytest -q" },
-		content: [{ type: "text", text: body }],
-		details: undefined,
-		isError: true,
-	} as ToolResultEvent;
-}
-
 describe("SoL-Pi regression stress", () => {
 	it("keeps EPR reducer routing on the configured Luna model under repeated calls", async () => {
 		const root = await mkdtemp(join(tmpdir(), "sol-pi-epr-stress-"));
@@ -173,7 +161,7 @@ describe("SoL-Pi regression stress", () => {
 				});
 				const body = `ERROR stress failure\ncase=${i}\n${"diagnostic line\n".repeat(360 + (i % 20))}`;
 
-				expect(await pi.emit("tool_result", bashEvent(body, `call-${i}`), context)).toBeUndefined();
+				expect(await pi.emit("tool_result", bashEvent(body, { toolCallId: `call-${i}` }), context)).toBeUndefined();
 				expect(calls).toBe(0);
 				expect(manager.customEntryData()).toContainEqual(
 					expect.objectContaining({ kind: "fallback", reason: "reducer-model-unavailable" }),
