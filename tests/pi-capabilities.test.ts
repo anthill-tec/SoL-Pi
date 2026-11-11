@@ -30,8 +30,13 @@ describe("Pi capabilities the capability guards probe", () => {
 		const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 		const devDependencies = readJson(join(root, "package.json")).devDependencies as Record<string, string>;
 		const installedRoot = dirname(dirname(fileURLToPath(import.meta.resolve(PI_PACKAGE))));
-		expect(devDependencies[PI_PACKAGE]).toBe("1.5.0");
-		expect(readJson(join(installedRoot, "package.json")).version).toBe(devDependencies[PI_PACKAGE]);
+		const pinned = devDependencies[PI_PACKAGE];
+		const installed = readJson(join(installedRoot, "package.json")).version;
+		// The pin is an exact version, not a range, so it names the one Pi the guards must not skip on.
+		expect(pinned, `${PI_PACKAGE} is not pinned to an exact version in devDependencies`).toMatch(
+			/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/,
+		);
+		expect(installed, `installed Pi ${String(installed)} is not the pinned Pi ${pinned}`).toBe(pinned);
 	});
 
 	it("Pi codemode (createCodemodeExtension) is present", () => {
