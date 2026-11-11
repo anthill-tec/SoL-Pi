@@ -24,6 +24,8 @@ import {
 	createOnlineContextCompactExtension,
 	POST_COMPACTION_PLAN_REMINDER,
 } from "../src/sol-pi/extensions/online-context-compact/extension.ts";
+import { DEFAULT_CONFIG } from "../src/sol-pi/config.ts";
+import { createSolPiExtension } from "../src/sol-pi/index.ts";
 import { boundaryResponses, compactions, recordingUi, reminders, waitFor, type Notification } from "./helpers.ts";
 
 /** Where `@gotgenes/pi-subagents` 25.0.5 publishes its service (`publishSubagentsService`). */
@@ -32,6 +34,31 @@ const DEFERRED_ENTRY = "sol-pi-online-context-compact-deferred";
 const DEFERRED_NOTICE = "Online compaction deferred: sub-agents are running";
 
 const COMPACTION = { enabled: false, keepRecentTokens: 150, reserveTokens: 1_024 };
+
+/** One way Online Context Compact reaches a session. Every scenario runs under each. */
+type Registration = {
+	/** The factory's name, shown in every test's name. */
+	readonly name: string;
+	/** Keeps the faux provider's names apart between registrations. */
+	readonly id: string;
+	readonly register: ExtensionFactory;
+};
+const REGISTRATIONS: readonly Registration[] = [
+	{
+		name: "createOnlineContextCompactExtension",
+		id: "occ",
+		register: (pi) =>
+			createOnlineContextCompactExtension({ cacheWriteReadRatio: 0, keepRecentTokens: COMPACTION.keepRecentTokens })(pi),
+	},
+	{
+		// The packaged entry point: it registers the features inside its first session_start, and
+		// keepRecentTokens comes from the session's compaction settings.
+		name: "createSolPiExtension",
+		id: "solpi",
+		register: (pi) =>
+			createSolPiExtension(() => ({ ...DEFAULT_CONFIG, onlineContextCompact: true, cacheWriteReadRatio: 0 }))(pi),
+	},
+];
 
 /** Pi's run mode as `bindExtensions` takes it (the package does not export `ExtensionMode`). */
 type ExtensionMode = NonNullable<Parameters<AgentSession["bindExtensions"]>[0]["mode"]>;
@@ -88,7 +115,7 @@ type ScenarioOptions = {
 	/** Runs after the session is created and before its session_start. */
 	readonly beforeSessionStart?: () => void;
 	/** Runs after session_start and before the prompt. */
-	readonly afterSessionStart?: () => void;
+	readonly afterSessionStart?: (session: AgentSession) => void | Promise<void>;
 };
 type ScenarioRun = {
 	readonly session: AgentSession;
@@ -101,8 +128,16 @@ type ScenarioRun = {
 	readonly settledCount: () => number;
 };
 
-/** Runs Online Context Compact in a real AgentSession (faux model) bound in `mode`, then prompts once. */
-async function withScenario(options: ScenarioOptions, body: (run: ScenarioRun) => Promise<void>): Promise<void> {
+/**
+ * Runs Online Context Compact, registered by `registration`, in a real AgentSession (faux model)
+ * bound in `mode`, then prompts once.
+ */
+async function runScenario(
+	registration: Registration,
+	options: ScenarioOptions,
+	body: (run: ScenarioRun) => Promise<void>,
+): Promise<void> {
+	const scenario = `${registration.id}-${options.name}`;
 	const cwd = await mkdtemp(join(tmpdir(), "sol-pi-occ-subagents-"));
 	const agentDir = join(cwd, "agent");
 	await mkdir(agentDir);
@@ -110,9 +145,9 @@ async function withScenario(options: ScenarioOptions, body: (run: ScenarioRun) =
 	let session: AgentSession | undefined;
 	try {
 		const faux = fauxProvider({
-			provider: `sol-pi-occ-subagents-${options.name}`,
-			api: `sol-pi-occ-subagents-api-${options.name}`,
-			models: [{ id: `sol-pi-occ-subagents-model-${options.name}`, contextWindow: 4_096, maxTokens: 1_024 }],
+			provider: `sol-pi-occ-subagents-${scenario}`,
+			api: `sol-pi-occ-subagents-api-${scenario}`,
+			models: [{ id: `sol-pi-occ-subagents-model-${scenario}`, contextWindow: 4_096, maxTokens: 1_024 }],
 		});
 		faux.setResponses(options.responses);
 
@@ -124,7 +159,7 @@ async function withScenario(options: ScenarioOptions, body: (run: ScenarioRun) =
 		};
 		const extension: ExtensionFactory = (pi) => {
 			pi.registerProvider(faux.provider);
-			createOnlineContextCompactExtension({ cacheWriteReadRatio: 0, keepRecentTokens: COMPACTION.keepRecentTokens })(pi);
+			registration.register(pi);
 			pi.on("session_before_compact", (event) => ({
 				compaction: {
 					summary: `deterministic compacted history ${"s".repeat(6_000)}`,
@@ -149,9 +184,9 @@ async function withScenario(options: ScenarioOptions, body: (run: ScenarioRun) =
 			agentDir,
 			settingsManager,
 			extensionFactories: [
-				{ name: `occ-subagents-recorder-${options.name}`, factory: recorder },
-				{ name: `occ-subagents-session-test-${options.name}`, factory: extension },
-				...(options.extensions ?? []).map((factory, index) => ({ name: `occ-subagents-extra-${options.name}-${index}`, factory })),
+				{ name: `occ-subagents-recorder-${scenario}`, factory: recorder },
+				{ name: `occ-subagents-session-test-${scenario}`, factory: extension },
+				...(options.extensions ?? []).map((factory, index) => ({ name: `occ-subagents-extra-${scenario}-${index}`, factory })),
 			],
 			noExtensions: true,
 			noSkills: true,
@@ -183,7 +218,7 @@ async function withScenario(options: ScenarioOptions, body: (run: ScenarioRun) =
 			uiContext: recordingUi(notifications) as never,
 			onError: (error) => extensionErrors.push(`${error.event}: ${error.error}`),
 		});
-		options.afterSessionStart?.();
+		await options.afterSessionStart?.(session);
 
 		let settledCount = 0;
 		const stopReasons: string[] = [];
@@ -256,11 +291,16 @@ function expectCompactedStep(run: ScenarioRun, finalReply: string): void {
 	expect(run.settledCount()).toBe(2);
 }
 
-describe("Online Context Compact with running pi-subagents agents", () => {
+for (const registration of REGISTRATIONS) describe(`Online Context Compact with running pi-subagents agents, registered by ${registration.name}`, () => {
 	beforeEach(clearServiceSlot);
 	afterEach(clearServiceSlot);
 
-	it("defers a favourable boundary compaction without stopping the turn while hasRunning() is true", async () => {
+	/** Names the registration in the test's own name, so a failure says which registration broke. */
+	const under = (behaviour: string): string => `${behaviour} (registered by ${registration.name})`;
+	const withScenario = (options: ScenarioOptions, body: (run: ScenarioRun) => Promise<void>): Promise<void> =>
+		runScenario(registration, options, body);
+
+	it(under("defers a favourable boundary compaction without stopping the turn while hasRunning() is true"), async () => {
 		const service = fakeService(() => true);
 		await withScenario(
 			{
@@ -276,7 +316,7 @@ describe("Online Context Compact with running pi-subagents agents", () => {
 		);
 	}, 10_000);
 
-	it("does not fire a turn_start abort-signal listener at a deferred step, while a later session.abort() still fires it", async () => {
+	it(under("does not fire a turn_start abort-signal listener at a deferred step, while a later session.abort() still fires it"), async () => {
 		const service = fakeService(() => true);
 		const { probe, factory } = interruptListener();
 		const waitForAbort: FauxResponseStep = async (_context, options) => {
@@ -317,7 +357,7 @@ describe("Online Context Compact with running pi-subagents agents", () => {
 	}, 10_000);
 
 	for (const after of ["replaced by a service that is not running", "deleted"] as const) {
-		it(`keeps the service captured at session_start when the slot is ${after} afterwards`, async () => {
+		it(under(`keeps the service captured at session_start when the slot is ${after} afterwards`), async () => {
 			const captured = fakeService(() => true);
 			const replacement = fakeService(() => false);
 			await withScenario(
@@ -339,7 +379,57 @@ describe("Online Context Compact with running pi-subagents agents", () => {
 		}, 10_000);
 	}
 
-	it("records no deferral and shows no notice when the step's economics do not compact", async () => {
+	it(under("keeps service A and never probes service B when a second session_start reaches the same extension instance"), async () => {
+		const first = fakeService(() => true);
+		const second = fakeService(() => false);
+		const sessionStarts: string[] = [];
+		await withScenario(
+			{
+				name: "second-session-start",
+				responses: singleBoundary("final after a second session_start"),
+				extensions: [
+					(pi) => {
+						pi.on("session_start", (event) => {
+							sessionStarts.push(event.reason);
+						});
+					},
+				],
+				beforeSessionStart: () => publishService(first),
+				afterSessionStart: async (session) => {
+					publishService(second);
+					// The session's own runner: the same extension instances that saw the first session_start.
+					await session.extensionRunner.emit({ type: "session_start", reason: "resume" });
+				},
+			},
+			async (run) => {
+				expect(sessionStarts).toEqual(["startup", "resume"]);
+				expectDeferredStep(run, "final after a second session_start");
+				expect(first.hasRunning).toHaveBeenCalledTimes(1);
+				expect(second.hasRunning).not.toHaveBeenCalled();
+				expect(second.abortAll).not.toHaveBeenCalled();
+			},
+		);
+	}, 10_000);
+
+	it(under("compacts and never probes a running service published after session_start when the slot was empty at session_start"), async () => {
+		const late = fakeService(() => true);
+		await withScenario(
+			{
+				name: "late-service",
+				responses: singleBoundary("final with a late service"),
+				afterSessionStart: () => publishService(late),
+			},
+			async (run) => {
+				// The slot still holds the late service at the decision: nothing reads it there.
+				expect(slot[SUBAGENTS_SERVICE_SLOT]).toBe(late);
+				expectCompactedStep(run, "final with a late service");
+				expect(late.hasRunning).not.toHaveBeenCalled();
+				expect(late.abortAll).not.toHaveBeenCalled();
+			},
+		);
+	}, 10_000);
+
+	it(under("records no deferral and shows no notice when the step's economics do not compact"), async () => {
 		const service = fakeService(() => true);
 		await withScenario(
 			{
@@ -362,13 +452,13 @@ describe("Online Context Compact with running pi-subagents agents", () => {
 		);
 	}, 10_000);
 
-	it("compacts the step completion unchanged when no service is in the slot at session_start", async () => {
+	it(under("compacts the step completion unchanged when no service is in the slot at session_start"), async () => {
 		await withScenario({ name: "no-service", responses: singleBoundary("final without a service") }, async (run) => {
 			expectCompactedStep(run, "final without a service");
 		});
 	}, 10_000);
 
-	it("compacts the step completion unchanged when the captured service has no hasRunning function", async () => {
+	it(under("compacts the step completion unchanged when the captured service has no hasRunning function"), async () => {
 		await withScenario(
 			{
 				name: "no-probe",
@@ -381,7 +471,7 @@ describe("Online Context Compact with running pi-subagents agents", () => {
 		);
 	}, 10_000);
 
-	it("compacts the step completion unchanged when hasRunning() is false", async () => {
+	it(under("compacts the step completion unchanged when hasRunning() is false"), async () => {
 		const service = fakeService(() => false);
 		await withScenario(
 			{
@@ -408,7 +498,7 @@ describe("Online Context Compact with running pi-subagents agents", () => {
 		["returns null", () => null],
 	];
 	for (const [label, hasRunning] of unsafeProbes) {
-		it(`defers the compaction when hasRunning() ${label}`, async () => {
+		it(under(`defers the compaction when hasRunning() ${label}`), async () => {
 			const service = fakeService(hasRunning);
 			await withScenario(
 				{
@@ -424,7 +514,7 @@ describe("Online Context Compact with running pi-subagents agents", () => {
 		}, 10_000);
 	}
 
-	it("compacts at the next step completion once hasRunning() is false after a deferral", async () => {
+	it(under("compacts at the next step completion once hasRunning() is false after a deferral"), async () => {
 		let running = true;
 		const service = fakeService(() => running);
 		const [open2, done2] = boundaryResponses(2, `second phase work ${"z".repeat(6_000)}`);
@@ -452,7 +542,7 @@ describe("Online Context Compact with running pi-subagents agents", () => {
 		);
 	}, 10_000);
 
-	it("notifies once in tui mode with the deferral notice at level info", async () => {
+	it(under("notifies once in tui mode with the deferral notice at level info"), async () => {
 		await withScenario(
 			{
 				name: "notice-tui",
@@ -468,7 +558,7 @@ describe("Online Context Compact with running pi-subagents agents", () => {
 	}, 10_000);
 
 	for (const mode of ["print", "json", "rpc"] as const) {
-		it(`shows no deferral notice in ${mode} mode`, async () => {
+		it(under(`shows no deferral notice in ${mode} mode`), async () => {
 			await withScenario(
 				{
 					name: `notice-${mode}`,

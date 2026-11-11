@@ -476,7 +476,7 @@ describe("declared Pi compatibility", () => {
 // --- The npm package `@anthill-tec/sol-pi` (CR-SLP-007 §S1) ------------------------------------------
 
 /** The release version both packages carry. */
-const RELEASE_VERSION = "0.1.0";
+const RELEASE_VERSION = "0.1.1";
 
 /** `package.json` values §S1 leaves unchanged, as on the base branch (develop at CR-SLP-004's merge). */
 const BASE_FILES = [

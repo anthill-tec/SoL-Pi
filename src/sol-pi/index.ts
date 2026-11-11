@@ -10,8 +10,16 @@ import { loadActionFusionBashOptions } from "./shell-options.ts";
 import { registerEvidencePreservingReducer } from "./extensions/evidence-preserving-reducer/index.ts";
 import { registerObservationPack } from "./extensions/observation-pack/index.ts";
 import { registerOnlineContextCompact } from "./extensions/online-context-compact/index.ts";
+import { captureSubagentsProbe } from "./extensions/online-context-compact/subagents.ts";
 import { clearSolPiSavingsTimer } from "./tui.ts";
 
+/**
+ * Registers the features the configuration enables. The packaged entry point calls this inside its
+ * first session_start handler, because the configuration needs that event's context. Pi delivers an
+ * event to the handlers registered when the delivery began, so a session_start handler a feature
+ * registers here misses the first session_start. Whatever a feature must do at that event is done
+ * here and handed to the feature.
+ */
 export function registerConfiguredFeatures(
 	pi: ExtensionAPI,
 	config: SolPiConfig,
@@ -25,7 +33,11 @@ export function registerConfiguredFeatures(
 			reducerProvider: config.evidencePreservingReducerProvider,
 		});
 	}
-	if (config.onlineContextCompact) registerOnlineContextCompact(pi, config.cacheWriteReadRatio);
+	// Online Context Compact binds the pi-subagents service at session_start. Its own handler misses
+	// the first one (see above), so the service is captured here, and only when the feature is enabled.
+	if (config.onlineContextCompact) {
+		registerOnlineContextCompact(pi, config.cacheWriteReadRatio, captureSubagentsProbe());
+	}
 }
 
 export type SolPiConfigLoader = (ctx: ExtensionContext) => SolPiConfig;
