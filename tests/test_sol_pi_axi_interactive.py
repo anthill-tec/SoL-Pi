@@ -848,10 +848,10 @@ class RerunCommandTest(InteractiveTestCase):
         help_steps = self.cancelled_help("setup", self.tree.project, "--cache-ratio", "4.5",
                                          "--interactive", f"--reducer={self.ODD_REDUCER}",
                                          "--features", "observationPack,evidencePreservingReducer")
-        self.assertEqual(help_steps, [
+        self.assertEqual(help_steps, [(
             f"sol-pi-axi setup {shlex.quote(str(self.tree.project))} "
             "--features observationPack,evidencePreservingReducer "
-            f"--reducer {shlex.quote(self.ODD_REDUCER)} --cache-ratio 4.5 --interactive"])
+            f"--reducer {shlex.quote(self.ODD_REDUCER)} --cache-ratio 4.5 --interactive")])
         self.assertIn("--reducer 'pro'\"'\"'v/m$od;x'", help_steps[0])
 
     def test_setup_in_a_directory_needing_quotes_keeps_it_quoted_before_the_flags(self):
@@ -859,8 +859,8 @@ class RerunCommandTest(InteractiveTestCase):
         project.mkdir()
         help_steps = self.cancelled_help("setup", project, "--interactive", "--reducer",
                                          "prov/mod-1")
-        self.assertEqual(help_steps, [f"sol-pi-axi setup {shlex.quote(str(project))} "
-                                      "--reducer prov/mod-1 --interactive"])
+        self.assertEqual(help_steps, [(f"sol-pi-axi setup {shlex.quote(str(project))} "
+                                       "--reducer prov/mod-1 --interactive")])
 
     def test_install_without_value_flags_runs_the_same_command_again(self):
         self.assertEqual(self.cancelled_help("install", "--interactive"),
@@ -870,9 +870,9 @@ class RerunCommandTest(InteractiveTestCase):
         help_steps = self.cancelled_help("install", "--format=json", "--interactive",
                                          "--cache-ratio", "3", "--reducer", self.ODD_REDUCER,
                                          "--features", "none", fmt="json")
-        self.assertEqual(help_steps, [
+        self.assertEqual(help_steps, [(
             f"sol-pi-axi install --features none --reducer {shlex.quote(self.ODD_REDUCER)} "
-            "--cache-ratio 3 --format json --interactive"])
+            "--cache-ratio 3 --format json --interactive")])
 
     def test_install_with_some_value_flags_names_only_those(self):
         help_steps = self.cancelled_help("install", "--interactive", "--features", "actionFusion")
