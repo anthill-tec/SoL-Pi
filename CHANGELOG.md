@@ -63,9 +63,9 @@ All notable changes to this project are documented in this file. The format is b
   `PI_NONINTERACTIVE` is unset or empty; otherwise it warns and runs as without
   `--interactive`. A cancel before the confirmation exits 130 (declined, Ctrl+C, Ctrl+D,
   `SIGINT`), 143 (`SIGTERM`) or 129 (`SIGHUP`), in addition to AXI's 0, 1 and 2, and writes and
-  registers nothing; its envelope's `help` gives the command to run it again, keeping the
-  `--features`, `--reducer`, `--cache-ratio` and `--format` values given. `--interactive` with
-  `--non-interactive`, with no verb, or on `uninstall` or `verify` is a usage error.
+  registers nothing; its envelope's `help` gives the command to run it again, keeping the values
+  the run was given. `--interactive` with `--non-interactive`, with no verb, or on `uninstall` or
+  `verify` is a usage error.
 
 ### Security
 

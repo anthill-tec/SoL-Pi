@@ -172,12 +172,21 @@ function installLines(text: string): string[] {
 	return text.split(/\r?\n/u).filter((line) => /\b(pi install|uv tool install)\b/u.test(line));
 }
 
-/** The `[Unreleased]` section of the changelog, up to the next release heading. */
-function unreleasedSection(changelog: string): string {
-	const start = changelog.indexOf("## [Unreleased]");
-	if (start < 0) throw new Error("CHANGELOG.md has no [Unreleased] section");
-	const next = changelog.indexOf("\n## [", start + 1);
-	return next < 0 ? changelog.slice(start) : changelog.slice(start, next);
+/** The release whose notes carry the entries these tests read. */
+const SHIPPED_IN = "0.1.0";
+
+/**
+ * The changelog section holding a release's entries: its own `## [<release>]` section once the
+ * release has moved them there, and `[Unreleased]` before that, so a test holds across the release.
+ * The section ends at the next release heading or at the compare links.
+ */
+function releaseNotes(changelog: string, release = SHIPPED_IN): string {
+	const released = changelog.indexOf(`## [${release}]`);
+	const start = released >= 0 ? released : changelog.indexOf("## [Unreleased]");
+	if (start < 0) throw new Error(`CHANGELOG.md has neither a [${release}] nor an [Unreleased] section`);
+	const rest = changelog.slice(start);
+	const end = rest.slice(1).search(/\n## \[|\n\[[^\]]+\]: /u);
+	return end < 0 ? rest : rest.slice(0, end + 1);
 }
 
 // CR-SLP-004 §S5: the `sol-pi-axi` command, its `setup` verb and its install are documented.
@@ -299,8 +308,8 @@ describe("sol-pi-axi documentation", () => {
 		expect(rows).toEqual(["| `toon-format` | 1.2.0 | MIT |"]);
 	});
 
-	it("CHANGELOG.md [Unreleased] records the sol-pi-axi command", () => {
-		const section = unreleasedSection(rootFile("CHANGELOG.md"));
+	it("CHANGELOG.md's 0.1.0 notes record the sol-pi-axi command", () => {
+		const section = releaseNotes(rootFile("CHANGELOG.md"));
 		expect(section).toContain("sol-pi-axi");
 		expect(section).toContain("setup");
 	});
@@ -466,8 +475,8 @@ describe("registry install documentation", () => {
 		expect(text).toContain("tests/fixtures/release-workflow/rendered.yml");
 	});
 
-	it("CHANGELOG.md [Unreleased] names the two packages, install and uninstall", () => {
-		const section = unreleasedSection(rootFile("CHANGELOG.md"));
+	it("CHANGELOG.md's 0.1.0 notes name the two packages, install and uninstall", () => {
+		const section = releaseNotes(rootFile("CHANGELOG.md"));
 		expect(section).toContain("@anthill-tec/sol-pi");
 		expect(section).toMatch(/`sol-pi-axi`|\bsol-pi-axi\b(?!-)/u);
 		expect(section).toMatch(/sol-pi-axi install\b|`install`/u);
@@ -475,8 +484,8 @@ describe("registry install documentation", () => {
 	});
 
 	// CR-SLP-008 §S5.
-	it("CHANGELOG.md [Unreleased] names verify, the check and the load signal, and no longer says the extension reads no environment variables", () => {
-		const section = unreleasedSection(rootFile("CHANGELOG.md"));
+	it("CHANGELOG.md's 0.1.0 notes name verify, the check and the load signal, and no longer says the extension reads no environment variables", () => {
+		const section = releaseNotes(rootFile("CHANGELOG.md"));
 		expect(section).toContain("sol-pi-axi verify");
 		expect(section).toMatch(/sol-pi-axi install[^.]*\bcheck|\bcheck[^.]*sol-pi-axi install|`install`[^.]*\bcheck/iu);
 		expect(section).toContain("SOL_PI_AXI_VERIFY");
@@ -636,28 +645,28 @@ describe("interactive setup documentation", () => {
 		).toBe(true);
 	});
 
-	it("CHANGELOG.md [Unreleased] names --interactive", () => {
-		expect(unreleasedSection(rootFile("CHANGELOG.md"))).toMatch(INTERACTIVE_FLAG);
+	it("CHANGELOG.md's 0.1.0 notes name --interactive", () => {
+		expect(releaseNotes(rootFile("CHANGELOG.md"))).toMatch(INTERACTIVE_FLAG);
 	});
 
-	it("CHANGELOG.md [Unreleased] names the fish setup script only in its removal entry", () => {
-		const naming = changelogEntries(unreleasedSection(rootFile("CHANGELOG.md"))).filter((entry) =>
+	it("CHANGELOG.md's 0.1.0 notes name the fish setup script only in its removal entry", () => {
+		const naming = changelogEntries(releaseNotes(rootFile("CHANGELOG.md"))).filter((entry) =>
 			entry.includes(FISH_SCRIPT),
 		);
 		expect(naming.length, "entries naming the fish setup script").toBe(1);
 		expect(naming[0]).toMatch(/\b(removed|retired|deleted|removal)\b/iu);
 	});
 
-	it("CHANGELOG.md [Unreleased]'s removal entry carries each row of DN §D7's mapping", () => {
-		const removal = changelogEntries(unreleasedSection(rootFile("CHANGELOG.md"))).filter(
+	it("CHANGELOG.md's 0.1.0 removal entry carries each row of DN §D7's mapping", () => {
+		const removal = changelogEntries(releaseNotes(rootFile("CHANGELOG.md"))).filter(
 			(entry) => entry.includes(FISH_SCRIPT) && /\b(removed|retired|deleted|removal)\b/iu.test(entry),
 		);
 		expect(removal.length, "one removal entry naming the fish setup script").toBe(1);
 		for (const row of D7_MAPPING) expect(carriesMappingRow(removal[0]!, row), row.row).toBe(true);
 	});
 
-	it("CHANGELOG.md [Unreleased]'s setup entry names --interactive, and no longer says the command does not prompt at all", () => {
-		const setup = changelogEntries(unreleasedSection(rootFile("CHANGELOG.md"))).filter(
+	it("CHANGELOG.md's 0.1.0 setup entry names --interactive, and no longer says the command does not prompt at all", () => {
+		const setup = changelogEntries(releaseNotes(rootFile("CHANGELOG.md"))).filter(
 			(entry) => entry.includes("--features") && entry.includes("--cache-ratio"),
 		);
 		expect(setup.length, "one entry describing setup and its value flags").toBe(1);
