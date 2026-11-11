@@ -11,7 +11,6 @@ import { cp, mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from "node
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fauxAssistantMessage, fauxProvider, fauxToolCall } from "@earendil-works/pi-ai/providers/faux";
-import * as piCodingAgent from "@earendil-works/pi-coding-agent";
 import {
 	CONFIG_DIR_NAME,
 	createAgentSession,
@@ -20,18 +19,12 @@ import {
 	SessionManager,
 	SettingsManager,
 	type AgentSession,
-	type ExtensionFactory,
 } from "@earendil-works/pi-coding-agent";
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { DEFAULT_CONFIG, loadSolPiConfig } from "../src/sol-pi/config.ts";
 import { THEN_RUN_FAILED, THEN_RUN_SKIPPED, THEN_RUN_SUCCEEDED } from "../src/sol-pi/extensions/action-fusion/index.ts";
 import { createSolPiExtension } from "../src/sol-pi/index.ts";
-import { settleWorkerExits, trackWorkerExits } from "./helpers.ts";
-
-/** Pi 1.0 codemode; the development dependency, Pi 1.5.0, ships it. */
-const createCodemodeExtension = (piCodingAgent as unknown as Record<string, unknown>).createCodemodeExtension as
-	| ((options: { mode: "on" | "only" }) => ExtensionFactory)
-	| undefined;
+import { createCodemodeExtension, settleWorkerExits, trackWorkerExits } from "./helpers.ts";
 
 type ToolResultMessage = {
 	toolCallId: string;

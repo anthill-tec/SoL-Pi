@@ -5,7 +5,6 @@
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import * as piCodingAgent from "@earendil-works/pi-coding-agent";
 import {
 	createAgentSession,
 	DefaultResourceLoader,
@@ -29,7 +28,7 @@ import {
 	POST_COMPACTION_PLAN_REMINDER,
 } from "../src/sol-pi/extensions/online-context-compact/extension.ts";
 import { ONLINE_STATE_ENTRY } from "../src/sol-pi/extensions/online-context-compact/state.ts";
-import { settleWorkerExits, trackWorkerExits } from "./helpers.ts";
+import { createCodemodeExtension, settleWorkerExits, trackWorkerExits } from "./helpers.ts";
 
 const OPEN = [{ id: "build", goal: "build it", status: "in_progress" }] as const;
 const DONE = [{ id: "build", goal: "build it", status: "completed" }] as const;
@@ -39,11 +38,6 @@ const PROGRESS = {
 	decisions: ["kept the implementation small"],
 };
 const DEFAULT_COMPACTION = { enabled: false, keepRecentTokens: 150, reserveTokens: 1_024 };
-
-/** Pi 1.0 codemode; Pi 0.84.2 does not ship it. */
-const createCodemodeExtension = (piCodingAgent as unknown as Record<string, unknown>).createCodemodeExtension as
-	| ((options: { mode: "on" | "only" }) => ExtensionFactory)
-	| undefined;
 
 type CompactionRequest = { customInstructions?: string; reason: string };
 type ToolStart = { toolName: string; toolCallId: string; parentToolCallId?: string };

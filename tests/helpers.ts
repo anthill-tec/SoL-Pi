@@ -3,7 +3,16 @@
  * SPDX-License-Identifier: MIT
  */
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
-import type { ExtensionAPI, ExtensionContext, SessionEntry, Theme, ToolDefinition } from "@earendil-works/pi-coding-agent";
+import * as piCodingAgent from "@earendil-works/pi-coding-agent";
+import {
+	createBashToolDefinition,
+	type ExtensionAPI,
+	type ExtensionContext,
+	type ExtensionFactory,
+	type SessionEntry,
+	type Theme,
+	type ToolDefinition,
+} from "@earendil-works/pi-coding-agent";
 import type { Component } from "@earendil-works/pi-tui";
 import { readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -233,6 +242,36 @@ export function fakeToolContext(
 		}),
 		...overrides,
 	} as unknown as ToolExecuteContext;
+}
+
+/*
+ * Capability probes of the installed Pi. The suite's capability guards skip on what these report
+ * missing, so it still runs against the older Pi the peer range admits; `pi-capabilities.test.ts`
+ * asserts that the development dependency's Pi has every one of them.
+ */
+
+/** Pi 1.0 codemode; Pi 0.84.2 does not ship it. */
+export const createCodemodeExtension = (piCodingAgent as unknown as Record<string, unknown>).createCodemodeExtension as
+	| ((options: { mode: "on" | "only" }) => ExtensionFactory)
+	| undefined;
+
+/** Pi's session projection, edits applied; Pi 0.84.2 does not ship it. */
+export const buildSessionProjection = (piCodingAgent as unknown as {
+	buildSessionProjection?: (entries: SessionEntry[]) => { messages: AgentMessage[] };
+}).buildSessionProjection;
+
+/**
+ * Pi 0.99 changed bash to return a non-zero exit as an `isError` result; 0.84
+ * throws. Detected from the installed bash, not from a version string.
+ */
+export async function bashReturnsNonZeroExit(): Promise<boolean> {
+	const bash = createBashToolDefinition(tmpdir(), { operations: { exec: async () => ({ exitCode: 7 }) } });
+	try {
+		await bash.execute("probe", { command: "exit 7" }, undefined, undefined, fakeToolContext(tmpdir(), { cwd: tmpdir() }));
+		return true;
+	} catch {
+		return false;
+	}
 }
 
 export function fakeContext(

@@ -19,7 +19,6 @@ import {
 	fauxToolCall,
 	type FauxResponseStep,
 } from "@earendil-works/pi-ai/providers/faux";
-import * as piCodingAgent from "@earendil-works/pi-coding-agent";
 import {
 	createAgentSession,
 	DefaultResourceLoader,
@@ -37,17 +36,12 @@ import {
 	REDUCER_RECEIPT_SCHEMA,
 } from "../src/sol-pi/extensions/evidence-preserving-reducer/index.ts";
 import { THRESHOLD_BYTES } from "../src/sol-pi/extensions/observation-pack/index.ts";
-import { settleWorkerExits, trackWorkerExits } from "./helpers.ts";
+import { createCodemodeExtension, settleWorkerExits, trackWorkerExits } from "./helpers.ts";
 import {
 	BOUNDARY_COMPACTION_INSTRUCTIONS,
 	POST_COMPACTION_PLAN_REMINDER,
 } from "../src/sol-pi/extensions/online-context-compact/extension.ts";
 import { createSolPiExtension } from "../src/sol-pi/index.ts";
-
-/** Pi 1.0 codemode; Pi 0.84.2 does not ship it. */
-const createCodemodeExtension = (piCodingAgent as unknown as Record<string, unknown>).createCodemodeExtension as
-	| ((options: { mode: "on" | "only" }) => ExtensionFactory)
-	| undefined;
 
 type CodemodeMode = "on" | "only";
 type DeclaredTool = { name: string; description?: string; parameters?: { properties?: Record<string, unknown> } };

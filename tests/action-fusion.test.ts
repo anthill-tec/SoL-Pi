@@ -8,7 +8,6 @@ import { join } from "node:path";
 import { afterEach, beforeAll, describe, expect, it, vi } from "bun:test";
 import {
 	type BashOperations,
-	createBashToolDefinition,
 	type ExtensionAPI,
 	initTheme,
 	type ToolDefinition,
@@ -21,7 +20,7 @@ import {
 } from "../src/sol-pi/extensions/action-fusion/index.ts";
 import { withFusedFileQueue } from "../src/sol-pi/extensions/action-fusion/file-queue.ts";
 import { runFusedMutation } from "../src/sol-pi/extensions/action-fusion/then-run.ts";
-import { componentText, fakeToolContext, plainTheme, type ToolExecuteContext } from "./helpers.ts";
+import { bashReturnsNonZeroExit, componentText, fakeToolContext, plainTheme, type ToolExecuteContext } from "./helpers.ts";
 
 function delay(ms: number): Promise<void> {
 	return new Promise((resolve) => setTimeout(resolve, ms));
@@ -69,20 +68,6 @@ function tuiContext(cwd: string) {
 	const notify = vi.fn();
 	const setStatus = vi.fn();
 	return { ctx: createContext(cwd, { mode: "tui", hasUI: true, ui: { notify, setStatus } }), notify, setStatus };
-}
-
-/**
- * Pi 0.99 changed bash to return a non-zero exit as an `isError` result; 0.84
- * throws. Detected from the installed bash, not from a version string.
- */
-async function bashReturnsNonZeroExit(): Promise<boolean> {
-	const bash = createBashToolDefinition(tmpdir(), { operations: { exec: async () => ({ exitCode: 7 }) } });
-	try {
-		await bash.execute("probe", { command: "exit 7" }, undefined, undefined, createContext(tmpdir()));
-		return true;
-	} catch {
-		return false;
-	}
 }
 
 const nonZeroExitIsResult = await bashReturnsNonZeroExit();
