@@ -7,6 +7,10 @@
 // rendering (committed verbatim as `tests/fixtures/release-workflow/rendered.yml`) with a fixed,
 // enumerated set of hand edits. Re-rendering drops the hand edits; these tests catch that.
 
+import { spawnSync } from "node:child_process";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it } from "bun:test";
 import { rootFile } from "./helpers.ts";
 
@@ -124,16 +128,46 @@ describe("release workflow", () => {
 		expect(jobs.rehearse?.environment).toBe("testpypi");
 	});
 
-	it("both publish guards fetch main and check origin/main", () => {
-		const jobs = release().jobs;
-		for (const name of ["publish-pypi", "publish-npm"]) {
-			expect(jobs[name], name).toBeDefined();
-			const guards = jobs[name]!.steps.filter((step) => step.name?.startsWith("Guard"));
-			expect(guards.map((step) => step.name), name).toEqual(["Guard - a version tag on main's history"]);
-			const run = guards[0]!.run!;
-			expect(run, name).toContain("git fetch --no-tags origin main\n");
-			expect(run, name).toContain('git merge-base --is-ancestor "$GITHUB_SHA" origin/main;');
-			expect(run, name).toContain("is not on origin/main");
+	it("both publish guards run: only an X.Y.Z tag ref whose commit is on origin/main passes", () => {
+		const root = mkdtempSync(join(tmpdir(), "release-guard-"));
+		const git = (cwd: string, ...args: string[]): string => {
+			const result = spawnSync("git", args, { cwd, encoding: "utf8" });
+			if (result.status !== 0) throw new Error(`git ${args.join(" ")}: ${result.stderr}`);
+			return result.stdout.trim();
+		};
+		try {
+			const origin = join(root, "origin.git");
+			const work = join(root, "work");
+			git(root, "init", "--bare", "--initial-branch=main", origin);
+			git(root, "clone", origin, work);
+			git(work, "config", "user.email", "ci@example.invalid");
+			git(work, "config", "user.name", "ci");
+			git(work, "commit", "--allow-empty", "-m", "on main");
+			git(work, "push", "origin", "HEAD:main");
+			const onMain = git(work, "rev-parse", "HEAD");
+			git(work, "checkout", "-b", "release-candidate");
+			git(work, "commit", "--allow-empty", "-m", "off main");
+			const offMain = git(work, "rev-parse", "HEAD");
+
+			const guard = (run: string, ref: string, sha: string) =>
+				spawnSync("bash", ["-e", "-c", run], { cwd: work, encoding: "utf8", env: { ...process.env, GITHUB_REF: ref, GITHUB_SHA: sha } });
+
+			const jobs = release().jobs;
+			for (const name of ["publish-pypi", "publish-npm"]) {
+				expect(jobs[name], name).toBeDefined();
+				const guards = jobs[name]!.steps.filter((step) => step.name?.startsWith("Guard"));
+				expect(guards.map((step) => step.name), name).toEqual(["Guard - a version tag on main's history"]);
+				const run = guards[0]!.run!;
+				expect(guard(run, "refs/tags/0.1.0", onMain).status, `${name}: tag on main`).toBe(0);
+				const branch = guard(run, "refs/heads/main", onMain);
+				expect(branch.status, `${name}: branch ref`).toBe(1);
+				expect(branch.stdout).toContain("is not an X.Y.Z tag ref");
+				const stray = guard(run, "refs/tags/0.1.0", offMain);
+				expect(stray.status, `${name}: tag off main`).toBe(1);
+				expect(stray.stdout).toContain("is not on origin/main");
+			}
+		} finally {
+			rmSync(root, { recursive: true, force: true });
 		}
 	});
 

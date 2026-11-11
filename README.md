@@ -28,7 +28,7 @@
 
 SoL-Pi is a standalone extension for Pi that packages four reusable efficiency mechanisms discovered through scaled auto-research loops. It reduces repeated model turns, context replay, oversized observations, and unnecessary long-log reading while preserving the work and evidence an agent needs to finish a task.
 
-SoL-Pi installs on top of an unmodified Pi release. Every mechanism is opt-in and disabled by default.
+SoL-Pi installs on top of an unmodified Pi release. Every mechanism is disabled until a `sol-pi.json` enables it; `sol-pi-axi install` and `sol-pi-axi setup` write one with all four enabled unless `--features` says otherwise.
 
 ## Introduction
 
@@ -67,7 +67,8 @@ Read our paper: [SoL-Pi: Recursively Scaling Auto-Research Loops for Efficient A
 ### Requirements
 
 - Node.js 22.19 or newer
-- Bun 1.4.4 or newer
+- Python 3.14 or newer and [uv](https://docs.astral.sh/uv/), for the `sol-pi-axi` command
+- Bun 1.4.4 or newer, only for a source checkout or a Bun-installed Pi
 - `@earendil-works/pi-coding-agent` 0.84.2 or newer; tested with 0.84.2, 1.0.4, 1.3.0, and 1.5.0. Install 1.5.0, the latest tested release: a fresh install of Pi 1.0.x or 1.1.0 now fails to start, because those releases do not pin their internal packages. Other versions are untested: `scripts/check-pi-compat.mjs` warns on them, and `--strict` fails.
 
 ### Install
@@ -93,7 +94,7 @@ uv tool install sol-pi-axi==<version>
 sol-pi-axi install
 ```
 
-`sol-pi-axi install` registers the extension `npm:@anthill-tec/sol-pi@<version>` with Pi (`pi install`, run from your home directory) and writes the agent directory's `sol-pi.json` with the setup defaults when it has none. Then configure each project:
+`sol-pi-axi install` registers the extension `npm:@anthill-tec/sol-pi@<version>` with Pi (`pi install`, run from your home directory) and writes the agent directory's `sol-pi.json` with the setup defaults when it has none. On a Pi with no `defaultProvider` and `defaultModel` in its `settings.json` (a Pi never started), give the reducer's route, `sol-pi-axi install --reducer <provider>/<model>`, or leave the reducer off with `--features actionFusion,observationPack,onlineContextCompact`; otherwise the run fails and names `--reducer`. Then configure each project:
 
 ```bash
 sol-pi-axi setup <project dir>
@@ -153,7 +154,7 @@ sol-pi-axi setup . --features actionFusion,observationPack --cache-ratio 8
 sol-pi-axi setup ~/work/app --reducer anthropic/claude-sonnet-4-5 --format json
 ```
 
-Every run except `--help` and `--version` prints one envelope on standard output: [TOON](https://github.com/toon-format/spec) under the root `axi`, or the same object as one JSON line with `--format json`. Every envelope has `verb`, `ok`, `version`, `warnings` and `help` (the next steps), and `error` when `ok` is false. A `setup` envelope adds `outcome` (`written`, `unchanged`, `failed` or `cancelled`), `path` (the file, absolute, or null), `config` (`features`, `reducer`, `cacheRatio`; null on failure) and `context` (`project`, `agentDir`). A usage error has `verb: usage` and `outcome: usage`.
+Every run except `--help` and `--version` prints one envelope on standard output: [TOON](https://github.com/toon-format/spec) under the root `axi`, or the same object as one JSON line with `--format json`. Every envelope has `verb`, `ok`, `version`, `warnings` and `help` (the next steps), and `error` when `ok` is false. A `setup` envelope adds `outcome` (`written`, `unchanged`, `failed` or `cancelled`), `path` (the file, absolute, or null), `config` (`features`, `reducer`, `cacheRatio`; null on failure, or the values shown so far when cancelled at a prompt) and `context` (`project`, `agentDir`). A usage error has `verb: usage` and `outcome: usage`.
 
 With no verb, `sol-pi-axi` prints the home view: `bin`, `description`, and the state (`absent`, `valid` or `invalid`) of the working directory's `.pi/sol-pi.json` and of the agent directory's `sol-pi.json`.
 

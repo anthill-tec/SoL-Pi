@@ -18,6 +18,11 @@ dev = ["unittest-xml-reporting", "coverage"]
 [project.scripts]
 sol-pi-axi = "sol_pi_axi.cli:main"
 
+[project.urls]
+Homepage = "https://github.com/anthill-tec/SoL-Pi"
+Changelog = "https://github.com/anthill-tec/SoL-Pi/blob/main/CHANGELOG.md"
+"Release Notes" = "https://github.com/anthill-tec/SoL-Pi/releases"
+
 [tool.hatch.version]
 path = "sol_pi_axi/_version.py"
 

@@ -6,10 +6,19 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-11-11
+
+### Upgrading
+
+- SoL-Pi is now installed from the registries instead of a checkout: the `sol-pi-axi` command
+  from PyPI registers the extension `@anthill-tec/sol-pi` from npm. The fish setup script is
+  gone; its replacements are listed under Removed. Install and upgrade as the
+  [install guide](https://github.com/anthill-tec/SoL-Pi/blob/main/agents-install.md) describes.
+
 ### Added
 
-- `sol-pi-axi`, an installed agent-facing command (Python 3.14+, `uv tool install
-  sol-pi-axi==<version>`). `sol-pi-axi setup <project dir>` writes
+- `sol-pi-axi`, an installed agent-facing command (Python 3.14+, installed with uv).
+  `sol-pi-axi setup <project dir>` writes
   `<project dir>/.pi/sol-pi.json` from the project file, the agent directory's `sol-pi.json` or the
   setup defaults (all four mechanisms on, ratio 12.5, the reducer on Pi's default provider and
   model), overridden by `--features`, `--reducer` and `--cache-ratio`; it prompts only with
@@ -54,7 +63,8 @@ All notable changes to this project are documented in this file. The format is b
   `PI_NONINTERACTIVE` is unset or empty; otherwise it warns and runs as without
   `--interactive`. A cancel before the confirmation exits 130 (declined, Ctrl+C, Ctrl+D,
   `SIGINT`), 143 (`SIGTERM`) or 129 (`SIGHUP`), in addition to AXI's 0, 1 and 2, and writes and
-  registers nothing. `--interactive` with `--non-interactive`, with no verb, or on `uninstall` or
+  registers nothing; its envelope's `help` gives the command to run it again, keeping the values
+  the run was given. `--interactive` with `--non-interactive`, with no verb, or on `uninstall` or
   `verify` is a usage error.
 
 ### Security
@@ -93,3 +103,8 @@ All notable changes to this project are documented in this file. The format is b
   user's ESC and stopped every background sub-agent. The compaction is deferred to the next
   completed step, recorded as a `sol-pi-online-context-compact-deferred` entry and, in the TUI,
   shown as an info notice.
+- The savings status timer no longer outlives its session: it is cleared at `session_shutdown`,
+  and a timer that fires on a stale context does nothing.
+
+[Unreleased]: https://github.com/anthill-tec/SoL-Pi/compare/0.1.0...HEAD
+[0.1.0]: https://github.com/anthill-tec/SoL-Pi/releases/tag/0.1.0
