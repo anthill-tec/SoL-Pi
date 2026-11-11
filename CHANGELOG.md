@@ -6,6 +6,13 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+### Fixed
+
+- Online Context Compact defers a boundary compaction while `@gotgenes/pi-subagents` has running
+  or queued sub-agents. 0.1.0 never deferred one, so completing a plan step could stop every
+  running sub-agent. The packaged extension now captures the pi-subagents service at
+  `session_start`, while it registers its features.
+
 ## [0.1.0] - 2026-11-11
 
 ### Upgrading
