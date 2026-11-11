@@ -6,6 +6,15 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-11-11
+
+### Upgrading
+
+- Upgrade both packages as the
+  [install guide](https://github.com/anthill-tec/SoL-Pi/blob/main/agents-install.md) describes,
+  then restart Pi, or run `/reload` in each open session. The 0.1.0 workaround, not completing a
+  plan step while a sub-agent is running, is no longer needed.
+
 ### Fixed
 
 - Online Context Compact defers a boundary compaction while `@gotgenes/pi-subagents` has running
@@ -113,5 +122,6 @@ All notable changes to this project are documented in this file. The format is b
 - The savings status timer no longer outlives its session: it is cleared at `session_shutdown`,
   and a timer that fires on a stale context does nothing.
 
-[Unreleased]: https://github.com/anthill-tec/SoL-Pi/compare/0.1.0...HEAD
+[Unreleased]: https://github.com/anthill-tec/SoL-Pi/compare/0.1.1...HEAD
+[0.1.1]: https://github.com/anthill-tec/SoL-Pi/compare/0.1.0...0.1.1
 [0.1.0]: https://github.com/anthill-tec/SoL-Pi/releases/tag/0.1.0
