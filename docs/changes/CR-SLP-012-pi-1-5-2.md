@@ -1,6 +1,6 @@
 # CR-SLP-012 — Support Pi 1.5.2
 
-**Status:** PENDING · Pre-review: ran — touches another project's surface (Model B's setup runs the strict Pi compatibility check and `sol-pi-axi install`, whose warning names the tested set)
+**Status:** COMPLETED (shipped 2026-11-14 on develop) · Pre-review: ran — touches another project's surface (Model B's setup runs the strict Pi compatibility check and `sol-pi-axi install`, whose warning names the tested set)
 **Type:** maintenance
 **Priority:** P1 — the current Pi release fails SoL-Pi's strict compatibility check, and `sol-pi-axi install` warns on it
 **Depends on:** none
@@ -163,49 +163,49 @@ recorder.
 
 ## Acceptance criteria
 
-- [ ] **§S1** `package.json` `devDependencies` has the four Pi packages at exactly `1.5.2`;
+- [x] **§S1** `package.json` `devDependencies` has the four Pi packages at exactly `1.5.2`;
       `peerDependencies` is unchanged.
-- [ ] **§S1** Every `@earendil-works/pi-*` entry in `bun.lock` is 1.5.2, and `bun audit
+- [x] **§S1** Every `@earendil-works/pi-*` entry in `bun.lock` is 1.5.2, and `bun audit
       --audit-level=high` reports no vulnerability.
-- [ ] **§S2** `bun scripts/check-pi-compat.mjs --strict` prints `Pi compatibility: OK` with no
+- [x] **§S2** `bun scripts/check-pi-compat.mjs --strict` prints `Pi compatibility: OK` with no
       warning and exits 0 against the development dependency.
-- [ ] **§S2** A `tests/package.test.ts` case runs the check with `--strict` against a fake Pi 1.5.2
+- [x] **§S2** A `tests/package.test.ts` case runs the check with `--strict` against a fake Pi 1.5.2
       that exports its own `VERSION` and whose internal packages are 1.5.2, and expects exit 0 with
       no warning; the same case for a fake Pi 1.5.1 expects the untested-version warning.
-- [ ] **§S2** The mixed-internal-packages test expects `install Pi 1.5.2` in the warning.
-- [ ] **§S2** `sol_pi_axi.pi.TESTED_PI_VERSIONS` is the five versions, and the existing Python test
+- [x] **§S2** The mixed-internal-packages test expects `install Pi 1.5.2` in the warning.
+- [x] **§S2** `sol_pi_axi.pi.TESTED_PI_VERSIONS` is the five versions, and the existing Python test
       that compares it with the script's list passes.
-- [ ] **§S2** A Python test runs `install` against the stub Pi at version `1.5.2` and expects no
+- [x] **§S2** A Python test runs `install` against the stub Pi at version `1.5.2` and expects no
       untested-version warning; at `1.5.1` it expects the warning, naming all five tested versions.
-- [ ] **§S2** The Bun client's and the Python client's gates on the 1.5.2 development dependency
+- [x] **§S2** The Bun client's and the Python client's gates on the 1.5.2 development dependency
       pass every test, including the Python integration tier against the real Pi, and add no skip;
       the Bun count is 529 plus this CR's new tests, the Python count 371 plus this CR's new tests.
-- [ ] **§S2** `docs/research/DN-sol-pi-axi.md` D6 records the run on Pi 1.5.2.
-- [ ] **§S2** The close-out records `check-pi-compat.mjs --strict` against the Bun global install of
+- [x] **§S2** `docs/research/DN-sol-pi-axi.md` D6 records the run on Pi 1.5.2.
+- [x] **§S2** The close-out records `check-pi-compat.mjs --strict` against the Bun global install of
       Pi 1.5.2, with its output line and exit status.
-- [ ] **§S3** `docs/compatibility.md` lists every change from Context, and any the §S2 run found,
+- [x] **§S3** `docs/compatibility.md` lists every change from Context, and any the §S2 run found,
       each with a decision; each decision that states behaviour names its test.
-- [ ] **§S3** Message threads, unchanged messages: in the session described in §S3, the second of
+- [x] **§S3** Message threads, unchanged messages: in the session described in §S3, the second of
       two consecutive requests with unchanged earlier messages is recorded with `thread.type`
       `"continue"` and only the messages added after the first reply.
-- [ ] **§S3** Message threads, Observation Pack: in that session, a tool result over Observation
+- [x] **§S3** Message threads, Observation Pack: in that session, a tool result over Observation
       Pack's threshold is sent in full as often as Observation Pack sends it, with every request
       after the first a `continue`; the request that first carries the replacement is recorded
       with `thread.type` `"create"`, every message, the replacement text and no copy of the
       original result.
-- [ ] **§S3** Message threads, compaction: in that session, the request after a compaction is
+- [x] **§S3** Message threads, compaction: in that session, the request after a compaction is
       recorded with `thread.type` `"create"`.
-- [ ] **§S3** Message threads, handler payload: in that session, a `before_provider_request` handler
+- [x] **§S3** Message threads, handler payload: in that session, a `before_provider_request` handler
       receives `system`, `tools` and every message on a request recorded as a `continue`.
-- [ ] **§S3** Package identity: the two `DefaultPackageManager` cases of §S3 pass.
-- [ ] **§S4** `tests/install-guide.test.ts` passes with the five tested versions and 1.5.2 as the
+- [x] **§S3** Package identity: the two `DefaultPackageManager` cases of §S3 pass.
+- [x] **§S4** `tests/install-guide.test.ts` passes with the five tested versions and 1.5.2 as the
       latest; README, `agents-install.md` and `docs/compatibility.md` each name the five tested
       versions; no install command in README or `agents-install.md` names `@1.5.0`; the four Pi
       rows of the `THIRD_PARTY_NOTICES.md` table read 1.5.2.
-- [ ] **§S4** `CONTRIBUTING.md` holds the project entry character for character as the
+- [x] **§S4** `CONTRIBUTING.md` holds the project entry character for character as the
       compatibility document gives it, and says when to remove it.
-- [ ] **§S4** `CHANGELOG.md` `[Unreleased]` has an entry for Pi 1.5.2 support.
-- [ ] **Gate** `pre-merge-gate` passes on both stacks.
+- [x] **§S4** `CHANGELOG.md` `[Unreleased]` has an entry for Pi 1.5.2 support.
+- [x] **Gate** `pre-merge-gate` passes on both stacks.
 
 ## Estimated size
 

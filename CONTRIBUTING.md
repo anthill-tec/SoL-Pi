@@ -37,6 +37,14 @@ pi install "/absolute/path/to/SoL-Pi" --local --approve
 
 Install the `sol-pi-axi` command from the checkout in editable mode with `uv tool install --editable "/absolute/path/to/SoL-Pi"`. Remove any registry install of SoL-Pi first (`sol-pi-axi uninstall`), so that Pi registers one SoL-Pi source.
 
+If you also have SoL-Pi installed user-wide from npm, a project that registers the checkout loads both copies. Add this entry to the project's `.pi/settings.json` `packages` to turn the user-level copy off for that project:
+
+```json
+{ "source": "npm:@anthill-tec/sol-pi", "autoload": false, "extensions": ["-src/sol-pi/index.ts"] }
+```
+
+Remove the entry when no user-level SoL-Pi is installed, for example after `sol-pi-axi uninstall`: Pi then treats it as an ordinary project package and tries to install it into the project. The [compatibility document](https://github.com/anthill-tec/SoL-Pi/blob/main/docs/compatibility.md#pi-151-and-152) gives the reason under package identity.
+
 ## Publishing a Release
 
 A release publishes two packages that share one version: the `sol-pi-axi` command to PyPI and the Pi extension `@anthill-tec/sol-pi` to npm. `.github/workflows/release.yml` runs the Bun and the Python tests on every run and gates every publish on them:

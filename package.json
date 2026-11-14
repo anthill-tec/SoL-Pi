@@ -23,7 +23,7 @@
   ],
   "scripts": {
     "test": "bun test --timeout 30000",
-    "test:integration": "bun test --timeout 30000 ./tests/action-fusion-guidance.test.ts ./tests/codemode-compat.test.ts ./tests/install-guide.test.ts ./tests/observation-pack.test.ts ./tests/online-context-compact-agent-session.test.ts ./tests/online-context-compact-cli.test.ts ./tests/online-context-compact-subagents.test.ts ./tests/package.test.ts ./tests/pi-1-5-changes.test.ts ./tests/pi-package-integration.test.ts ./tests/release-workflow.test.ts ./tests/setup-references.test.ts ./tests/sol-pi-config-conformance.test.ts ./tests/sol-pi-config-preflight.test.ts ./tests/verify-load-signal.test.ts",
+    "test:integration": "bun test --timeout 30000 ./tests/action-fusion-guidance.test.ts ./tests/codemode-compat.test.ts ./tests/install-guide.test.ts ./tests/observation-pack.test.ts ./tests/online-context-compact-agent-session.test.ts ./tests/online-context-compact-cli.test.ts ./tests/online-context-compact-subagents.test.ts ./tests/package.test.ts ./tests/pi-1-5-changes.test.ts ./tests/pi-1-5-2-changes.test.ts ./tests/pi-package-integration.test.ts ./tests/release-workflow.test.ts ./tests/setup-references.test.ts ./tests/sol-pi-config-conformance.test.ts ./tests/sol-pi-config-preflight.test.ts ./tests/verify-load-signal.test.ts",
     "typecheck": "tsc --noEmit",
     "check": "bun run typecheck && bun run test && bun pm pack --dry-run",
     "check:pi": "bun scripts/check-pi-compat.mjs"
@@ -46,10 +46,10 @@
     "typebox": "*"
   },
   "devDependencies": {
-    "@earendil-works/pi-agent-core": "1.5.0",
-    "@earendil-works/pi-ai": "1.5.0",
-    "@earendil-works/pi-coding-agent": "1.5.0",
-    "@earendil-works/pi-tui": "1.5.0",
+    "@earendil-works/pi-agent-core": "1.5.2",
+    "@earendil-works/pi-ai": "1.5.2",
+    "@earendil-works/pi-coding-agent": "1.5.2",
+    "@earendil-works/pi-tui": "1.5.2",
     "@types/bun": "1.4.4",
     "@types/node": "22.20.5",
     "typebox": "1.3.27",

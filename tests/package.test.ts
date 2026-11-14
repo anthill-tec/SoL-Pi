@@ -306,8 +306,9 @@ describe("Pi compatibility check", () => {
 		const relaxed = checkPiCompat("--pi-root", root);
 		expect(relaxed.status, relaxed.output).toBe(0);
 		expect(relaxed.output).toContain(`WARN: Pi ${version} is installed with internal packages from other releases (pi-codemode 99.0.0)`);
-		// The warning advises the latest tested release, Pi 1.5.0 (CR-SLP-002 §S2).
-		expect(relaxed.output).toContain("install Pi 1.5.0");
+		// The warning advises the latest tested release, Pi 1.5.2 (CR-SLP-012 §S2).
+		expect(relaxed.output).toContain("install Pi 1.5.2");
+		expect(relaxed.output).not.toContain("install Pi 1.5.0");
 		expect(relaxed.output).not.toContain("install Pi 1.3.0");
 		const strict = checkPiCompat("--pi-root", root, "--strict");
 		expect(strict.status, strict.output).toBe(1);
@@ -321,6 +322,34 @@ describe("Pi compatibility check", () => {
 		expect(result.output).not.toContain("ERROR:");
 		expect(result.output).toMatch(/^Pi compatibility: OK$/mu);
 		expect(result.status, result.output).toBe(0);
+	}, 30_000);
+
+	it("passes a Pi 1.5.2 install with its own VERSION and 1.5.2 internals under --strict without a warning", () => {
+		// Pi 1.5.2's internal package graph is 1.5.0's, each package pinned exactly at 1.5.2.
+		const root = fakePiRelease("1.5.2");
+		const result = checkPiCompat("--pi-root", root, "--strict");
+		expect(result.output).toMatch(/^Pi: @earendil-works\/pi-coding-agent@1\.5\.2 \(.+sol-pi-compat-.+\)$/mu);
+		expect(result.output).not.toContain("WARN:");
+		expect(result.output).not.toContain("ERROR:");
+		expect(result.output).toMatch(/^Pi compatibility: OK$/mu);
+		expect(result.status, result.output).toBe(0);
+	}, 30_000);
+
+	it("warns that a Pi 1.5.1 install with its own VERSION and 1.5.1 internals is untested, naming the five tested versions, and fails it under --strict", () => {
+		// Pi 1.5.1 is not in the tested set: no run tested it (CR-SLP-012 non-goal).
+		const root = fakePiRelease("1.5.1");
+		const relaxed = checkPiCompat("--pi-root", root);
+		expect(relaxed.status, relaxed.output).toBe(0);
+		expect(relaxed.output).toContain(
+			"WARN: Pi 1.5.1 is not in the tested set (0.84.2, 1.0.4, 1.3.0, 1.5.0, 1.5.2); API checks still apply",
+		);
+		// The untested-version warning is the only one: the internals are all 1.5.1.
+		expect(relaxed.output.match(/^WARN:/gmu)).toHaveLength(1);
+		expect(relaxed.output).not.toContain("ERROR:");
+		const strict = checkPiCompat("--pi-root", root, "--strict");
+		expect(strict.status, strict.output).toBe(1);
+		expect(strict.output).toContain("WARN: Pi 1.5.1 is not in the tested set");
+		expect(strict.output).toContain("Pi compatibility: FAIL");
 	}, 30_000);
 
 	it("warns when an internal package Pi reaches only indirectly comes from another release", () => {
