@@ -69,23 +69,23 @@ Read our paper: [SoL-Pi: Recursively Scaling Auto-Research Loops for Efficient A
 - Node.js 22.19 or newer
 - Python 3.14 or newer and [uv](https://docs.astral.sh/uv/), for the `sol-pi-axi` command
 - Bun 1.4.4 or newer, only for a source checkout or a Bun-installed Pi
-- `@earendil-works/pi-coding-agent` 0.84.2 or newer; tested with 0.84.2, 1.0.4, 1.3.0, and 1.5.0. Install 1.5.0, the latest tested release: a fresh install of Pi 1.0.x or 1.1.0 now fails to start, because those releases do not pin their internal packages. Other versions are untested: `scripts/check-pi-compat.mjs` warns on them, and `--strict` fails.
+- `@earendil-works/pi-coding-agent` 0.84.2 or newer; tested with 0.84.2, 1.0.4, 1.3.0, 1.5.0, and 1.5.2. Install 1.5.2, the latest tested release: a fresh install of Pi 1.0.x or 1.1.0 now fails to start, because those releases do not pin their internal packages. Other versions are untested: `scripts/check-pi-compat.mjs` warns on them, and `--strict` fails.
 
 ### Install
 
 Install the latest tested Pi release with Bun:
 
 ```bash
-bun add --global @earendil-works/pi-coding-agent@1.5.0
+bun add --global @earendil-works/pi-coding-agent@1.5.2
 ```
 
 Or, with npm:
 
 ```bash
-npm install --global @earendil-works/pi-coding-agent@1.5.0
+npm install --global @earendil-works/pi-coding-agent@1.5.2
 ```
 
-Pi 1.3.0 and 0.84.2 remain supported and tested; install `@earendil-works/pi-coding-agent@1.3.0` or `@earendil-works/pi-coding-agent@0.84.2` instead to stay on one of them.
+Pi 1.5.0, 1.3.0 and 0.84.2 remain supported and tested; install `@earendil-works/pi-coding-agent@1.5.0`, `@earendil-works/pi-coding-agent@1.3.0` or `@earendil-works/pi-coding-agent@0.84.2` instead to stay on one of them.
 
 Then install the `sol-pi-axi` command from PyPI and let it register the extension with Pi. It needs Python 3.14 or newer and [uv](https://docs.astral.sh/uv/); `<version>` is a SoL-Pi release:
 
@@ -184,7 +184,7 @@ A prompted run can be cancelled before the confirmation: declining it, Ctrl+C, C
 
 ### Pi 1.x and codemode
 
-SoL-Pi is tested with Pi 0.84.2, 1.0.4, 1.3.0, and 1.5.0. All four mechanisms work with Pi codemode in both `codemode.mode: "on"` and `"only"`. In `"only"` mode, the model reaches bash, edit, and write through codemode scripts, and Evidence-Preserving Reducer skips script calls, so it has no effect there. See [Codemode](https://github.com/anthill-tec/SoL-Pi/blob/main/docs/compatibility.md#codemode) for per-mechanism behavior.
+SoL-Pi is tested with Pi 0.84.2, 1.0.4, 1.3.0, 1.5.0, and 1.5.2. All four mechanisms work with Pi codemode in both `codemode.mode: "on"` and `"only"`. In `"only"` mode, the model reaches bash, edit, and write through codemode scripts, and Evidence-Preserving Reducer skips script calls, so it has no effect there. See [Codemode](https://github.com/anthill-tec/SoL-Pi/blob/main/docs/compatibility.md#codemode) for per-mechanism behavior.
 
 To check the Pi that will load SoL-Pi, install the checkout's dependencies, then run the check from the checkout; `--strict` also fails on an untested Pi version. Without `bun install`, the check cannot load TypeScript, prints a warning, and fails under `--strict` even on a tested Pi. For a Pi installed with Bun:
 
@@ -237,7 +237,7 @@ bun audit --audit-level=high
 bun run check:pi
 ```
 
-`bun run check` covers TypeScript, the complete test suite, and package inspection. `bun run check:pi` runs `scripts/check-pi-compat.mjs` against the development dependency; pass `-- --strict` to fail on warnings, or `-- --pi-root <dir>` to check another Pi installation. The development dependency set is pinned to Pi 1.5.0. To check another tested Pi version, install its four Pi packages over the development dependency (for 1.0.4 also `pi-codemode`, `pi-mcp` and `chord` at 1.0.4) and rerun the checks; runtime Pi packages remain peer dependencies so Pi owns their installation and upgrades.
+`bun run check` covers TypeScript, the complete test suite, and package inspection. `bun run check:pi` runs `scripts/check-pi-compat.mjs` against the development dependency; pass `-- --strict` to fail on warnings, or `-- --pi-root <dir>` to check another Pi installation. The development dependency set is pinned to Pi 1.5.2. To check another tested Pi version, install its four Pi packages over the development dependency (for 1.0.4 also `pi-codemode`, `pi-mcp` and `chord` at 1.0.4) and rerun the checks; runtime Pi packages remain peer dependencies so Pi owns their installation and upgrades.
 
 ## Project Status
 

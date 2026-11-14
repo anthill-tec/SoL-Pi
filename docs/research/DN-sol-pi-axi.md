@@ -83,6 +83,9 @@ in #1555); the AXI standard (<https://axi.md>); Pi 1.5.0 (`DefaultPackageManager
   error is an `extension_error` JSON line on standard output, and Pi carries on; an invalid
   `sol-pi.json` surfaces this way at `session_start`. An npm package's entry lies under
   `<agent dir>/npm/node_modules/<name>`.
+- Re-run on Pi 1.5.2 (CR-SLP-012): the Python suite's real-Pi integration tier passes against the
+  Pi 1.5.2 development dependency (`PI_BIN=node_modules/.bin/pi`, Crucible run
+  `run-ef610671-f04b-492b-8ebf-6fc17c4bfa32`, 373 passed, 0 failed).
 - RPC lists no extensions or tools, and SoL-Pi registers no command, so a clean start does not
   prove SoL-Pi loaded: a filtered entry, or a missing package, starts cleanly. Pi's resource filters
   are a glob language (minimatch includes, `!` excludes, `+`/`-` exact overrides, matched on

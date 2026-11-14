@@ -6,6 +6,13 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+### Added
+
+- Support for Pi 1.5.2. SoL-Pi is tested with Pi 0.84.2, 1.0.4, 1.3.0, 1.5.0 and 1.5.2, and the
+  install guide installs Pi 1.5.2, the latest tested release. `scripts/check-pi-compat.mjs --strict`
+  and `sol-pi-axi install` accept Pi 1.5.2 without an untested-version warning, and the
+  development dependency is Pi 1.5.2.
+
 ## [0.1.1] - 2026-11-11
 
 ### Upgrading
