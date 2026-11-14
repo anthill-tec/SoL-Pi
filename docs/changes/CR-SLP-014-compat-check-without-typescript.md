@@ -1,6 +1,6 @@
 # CR-SLP-014 — Pi compatibility check without the TypeScript compiler API; TypeScript 7
 
-**Status:** DRAFT · Pre-review: due — touches another project's surface (Model B's setup runs `check-pi-compat.mjs --strict`)
+**Status:** PENDING · Pre-review: ran — touches another project's surface (Model B's setup runs `check-pi-compat.mjs --strict`)
 **Type:** maintenance
 **Priority:** P2 — blocks the TypeScript 7 upgrade; the strict check fails on a tested Pi when the checkout's dependencies are not installed
 **Depends on:** CR-SLP-012 (both edit `scripts/check-pi-compat.mjs`)
@@ -63,6 +63,9 @@ Options for the script (recommendation first):
 
 - `tsconfig.json` sets `verbatimModuleSyntax: true`. The type check of `src/` and `tests/` passes
   with no source change.
+- The type check is the setting's enforcement: the pre-merge gate and `bun run check` run it. CI
+  runs no type check today, for any type error, and this CR does not add one (Mainline's scoping
+  call, reported to the user).
 
 ### §S2 — The compatibility check reads runtime imports without TypeScript
 
@@ -71,7 +74,15 @@ Options for the script (recommendation first):
 - The script loads no TypeScript and transpiles nothing. It collects, from every `.ts` file under
   `src/`, the names imported from `@earendil-works/*` by import statements that are not
   `import type`, leaving out each name marked `type` inside the braces. A name imported
-  `as` another keeps the exported name, as now.
+  `as` another keeps the exported name, as now. Braces may span several lines.
+- Forms the script does not check, as today: a namespace import (`import * as pi from …`; today
+  `online-context-compact/projection.ts` reaches `buildSessionProjection` that way, through a
+  cast), a default import, and `export … from`. The header comment says so.
+- Comments are removed before the imports are read, so an import written inside a comment is not
+  checked. No Pi import appears in a comment or string in `src/` today.
+- On today's `src/` the script collects exactly the names the TypeScript 6.0.3 transpile collects
+  (measured at the pre-review: nine from `pi-coding-agent`, `complete` from `pi-ai/compat`,
+  `Container` and `Text` from `pi-tui`).
 - The "typescript is not installed" warning is gone, so `--strict` passes on a tested Pi whether or
   not the checkout's dependencies are installed, provided the Pi under test resolves.
 - Every other check is unchanged: the version policy, the mixed-internal-packages check, the method
@@ -101,17 +112,29 @@ Options for the script (recommendation first):
 ## Acceptance criteria
 
 - [ ] **§S1** `tsconfig.json` has `verbatimModuleSyntax: true`, and `bun run typecheck` passes.
-- [ ] **§S1** A test type-checks a fixture file that imports a Pi type without `type` under the
-      repository's `tsconfig.json` settings and expects error TS1484.
-- [ ] **§S2** `scripts/check-pi-compat.mjs` contains no `typescript` import, `require` or
-      `transpileModule`.
+- [ ] **§S1** A test writes a temporary fixture inside the repository tree but outside
+      `tsconfig.json`'s `include` globs (so `bun run typecheck` never sees it), with a temporary
+      config that extends the repository's `tsconfig.json` and includes only the fixture. The
+      fixture imports a Pi type without `type`. The test runs the repository's `tsc --noEmit -p`
+      on that config and expects exactly one diagnostic, TS1484; the same fixture written with
+      `import type` gives none. The fixture and config are removed afterwards.
+- [ ] **§S2** `scripts/check-pi-compat.mjs` contains no `from "typescript"`, no
+      `require("typescript")`, no `createRequire(…)("typescript")` and no `transpileModule(`.
 - [ ] **§S2** The existing test "checks only the Pi imports that survive TypeScript import
-      elision" is rewritten for the new rule and passes: names in `import type { … }` and names
-      marked `type` inside braces are not checked; a missing name imported without `type` fails the
-      check and is named in the output.
-- [ ] **§S2** A test runs the script with `--strict` from a fake checkout with no `typescript`
-      package resolvable, against a fake Pi at a tested version, and expects exit 0 with no
-      warning.
+      elision" is rewritten for the new rule and passes, with one fixture file per form and its
+      expected result:
+      - `import type { … }`, on one line and over several lines: not checked;
+      - braces over several lines mixing `type` names and value names: only the value names
+        checked;
+      - `import { complete as completeCompat } from "@earendil-works/pi-ai/compat"`: `complete`
+        checked against the compat entrypoint;
+      - `import * as pi from …`, a default import, and `export { x } from …`: not checked;
+      - an import inside a comment: not checked;
+      - a missing name imported without `type`: the check fails and names it.
+- [ ] **§S2** A test builds a fake checkout with no `node_modules` of its own, under a temporary
+      root with no `node_modules` above it, asserts that `typescript` does not resolve from it,
+      and runs the script there with `--strict --pi-root` pointing at a fake Pi at a tested
+      version. It expects exit 0 and no warning.
 - [ ] **§S2** The existing script tests (version policy, mixed internal packages, method checks,
       bash and codemode reporting) pass unchanged in what they expect.
 - [ ] **§S3** `package.json` `devDependencies.typescript` is `7.0.2`; `bun.lock` resolves it;
@@ -127,9 +150,14 @@ Options for the script (recommendation first):
 
 ## Risks
 
-- **The rule reads text, not syntax.** A future import written over several lines with comments,
-  or a re-export (`export { x } from "@earendil-works/…"`), could escape the regular expression.
+- **The rule reads text, not syntax.** A future import form not in the §S2 list could escape it.
   The §S2 tests pin the forms the source uses today; a new form needs a test with it.
+- **A type imported without `type` passes CI.** Only the gate and `bun run check` type-check. The
+  script would then report it as a missing Pi export, unless a runtime export has the same name.
+- **Crucible and TypeScript 7 diagnostics.** `bun-crucible.py check` ingests the type checker's
+  output; whether Crucible 0.3.0 parses TypeScript 7's diagnostics (which add "The file is in the
+  program because:" lines) is unchecked. GREEN runs `check` with a deliberate type error once and
+  reports what the board shows; a parsing gap is reported to Crucible, not fixed here.
 - **TypeScript 7 is a native compiler.** It installs per platform through optional dependencies.
   A platform without a native package cannot type-check. Pi and the npm package are unaffected:
   TypeScript is a development tool only.
