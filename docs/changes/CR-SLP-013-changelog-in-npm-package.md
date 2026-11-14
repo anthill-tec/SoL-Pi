@@ -1,6 +1,6 @@
 # CR-SLP-013 — Ship CHANGELOG.md in the npm package
 
-**Status:** PENDING · Pre-review: none — no trigger
+**Status:** COMPLETED (shipped 2026-11-14 on develop) · Pre-review: none — no trigger
 **Type:** defect
 **Priority:** P2 — after an update from npm, Pi shows no update notes for SoL-Pi
 **Depends on:** none
@@ -55,19 +55,19 @@ update changelogs"). The npm package never carries the file:
 
 ## Acceptance criteria
 
-- [ ] **§S1** `package.json` `files` is CR-SLP-007's list plus `CHANGELOG.md`, and `pi` is
+- [x] **§S1** `package.json` `files` is CR-SLP-007's list plus `CHANGELOG.md`, and `pi` is
       unchanged (no `changelogPath`).
-- [ ] **§S1** `tests/package.test.ts` expects `CHANGELOG.md` in `files` and in the
+- [x] **§S1** `tests/package.test.ts` expects `CHANGELOG.md` in `files` and in the
       `bun pm pack --dry-run` list; every other packed file is unchanged.
-- [ ] **§S1** A test packs the checkout, unpacks it, and runs Pi's changelog step on the unpacked
+- [x] **§S1** A test packs the checkout, unpacks it, and runs Pi's changelog step on the unpacked
       package with a last-seen version below the package's version. The update it gets holds the
       heading and entries of the package version's `CHANGELOG.md` section, and no `[Unreleased]`
       entry. It fails while `files` lacks `CHANGELOG.md`.
-- [ ] **§S2** `docs/compatibility.md` no longer says the npm package lacks `CHANGELOG.md`, and its
+- [x] **§S2** `docs/compatibility.md` no longer says the npm package lacks `CHANGELOG.md`, and its
       extension update changelogs row names the §S1 test.
-- [ ] **§S2** `CHANGELOG.md` `[Unreleased]` has a Fixed entry: Pi now shows SoL-Pi's update notes
+- [x] **§S2** `CHANGELOG.md` `[Unreleased]` has a Fixed entry: Pi now shows SoL-Pi's update notes
       after an upgrade from npm.
-- [ ] **Gate** `pre-merge-gate` passes on both stacks.
+- [x] **Gate** `pre-merge-gate` passes on both stacks.
 
 ## Estimated size
 
