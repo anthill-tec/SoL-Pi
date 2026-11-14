@@ -18,6 +18,7 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import { fauxProvider } from "@earendil-works/pi-ai/providers/faux";
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
+import { extensionChangelogUpdates } from "./helpers.ts";
 
 interface PackageManifest {
 	peerDependencies: Record<string, string>;
@@ -507,7 +508,11 @@ describe("declared Pi compatibility", () => {
 /** The release version both packages carry. */
 const RELEASE_VERSION = "0.1.1";
 
-/** `package.json` values §S1 leaves unchanged, as on the base branch (develop at CR-SLP-004's merge). */
+/**
+ * `package.json` values §S1 leaves unchanged, as on the base branch (develop at CR-SLP-004's merge),
+ * except that `files` names `CHANGELOG.md` after `README.md` (CR-SLP-013 §S1), so Pi finds the
+ * changelog at the installed package's root and shows its update notes.
+ */
 const BASE_FILES = [
 	"src/sol-pi",
 	"assets",
@@ -516,6 +521,7 @@ const BASE_FILES = [
 	"scripts/check-sol-pi-config.mjs",
 	"agents-install.md",
 	"README.md",
+	"CHANGELOG.md",
 	"LICENSE",
 	"CONTRIBUTING.md",
 	"SECURITY.md",
@@ -531,8 +537,9 @@ const BASE_PEER_DEPENDENCIES = {
 	typebox: "*",
 };
 
-/** The files `bun pm pack --dry-run` lists on the base branch, sorted. */
+/** The files `bun pm pack --dry-run` lists on the base branch, sorted, plus `CHANGELOG.md` (CR-SLP-013 §S1). */
 const BASE_PACKED_FILES = [
+	"CHANGELOG.md",
 	"CONTRIBUTING.md",
 	"LICENSE",
 	"README.md",
@@ -599,7 +606,7 @@ describe("npm package @anthill-tec/sol-pi", () => {
 		expect(readFileSync("sol_pi_axi/_version.py", "utf8")).toBe(`__version__ = "${RELEASE_VERSION}"\n`);
 	});
 
-	it("keeps files, pi.extensions, peerDependencies and dependencies unchanged", () => {
+	it("lists the base branch's files plus CHANGELOG.md, and keeps pi (no changelogPath), peerDependencies and dependencies unchanged", () => {
 		expect(manifest.files).toEqual(BASE_FILES);
 		expect(manifest.pi).toEqual(BASE_PI);
 		expect(manifest.peerDependencies).toEqual(BASE_PEER_DEPENDENCIES);
@@ -615,7 +622,7 @@ describe("npm package @anthill-tec/sol-pi", () => {
 		expect({ status: result.status, stderr: result.stderr }).toEqual({ status: 0, stderr: "" });
 	}, 30_000);
 
-	it("packs the same files as the base branch", () => {
+	it("packs the base branch's files plus CHANGELOG.md and nothing else new", () => {
 		expect([...packedFiles()].sort()).toEqual(BASE_PACKED_FILES);
 	}, 30_000);
 
@@ -685,6 +692,73 @@ describe("npm package @anthill-tec/sol-pi", () => {
 			expect(session.getActiveToolNames()).toEqual(expect.arrayContaining(SOL_PI_TOOLS));
 		} finally {
 			session?.dispose();
+			rmSync(root, { recursive: true, force: true });
+		}
+	}, 60_000);
+
+	it("packs a tarball as the release workflow's npm publish does, whose CHANGELOG.md gives Pi's update step exactly the package version's section", async () => {
+		const root = mkdtempSync(join(tmpdir(), "sol-pi-tarball-changelog-"));
+		try {
+			// The release workflow publishes with `npm publish`, which packs the checkout as `npm pack` does.
+			const packed = spawnSync("npm", ["pack", "--pack-destination", root], {
+				cwd: process.cwd(),
+				encoding: "utf8",
+				timeout: 25_000,
+				env: { ...process.env, npm_config_update_notifier: "false", npm_config_fund: "false" },
+			});
+			expect(packed.status, packed.stderr).toBe(0);
+			const tarballs = readdirSync(root).filter((name) => name.endsWith(".tgz"));
+			expect(tarballs).toHaveLength(1);
+			const unpacked = join(root, "unpacked");
+			mkdirSync(unpacked);
+			const untar = spawnSync("tar", ["-xzf", join(root, tarballs[0] ?? ""), "-C", unpacked], { encoding: "utf8" });
+			expect(untar.status, untar.stderr).toBe(0);
+			const packageDir = join(unpacked, "package");
+			const packedManifest = JSON.parse(readFileSync(join(packageDir, "package.json"), "utf8")) as { name: string; version: string };
+			const { name, version } = packedManifest;
+			expect({ name, version }).toEqual({ name: "@anthill-tec/sol-pi", version: RELEASE_VERSION });
+
+			// The expectation: the package version's section of the checkout's CHANGELOG.md, its body as the
+			// release workflow's own extractor prints it for the release notes.
+			const extracted = spawnSync("python3", [".github/scripts/changelog_section.py", "CHANGELOG.md", version], {
+				cwd: process.cwd(),
+				encoding: "utf8",
+				timeout: 25_000,
+			});
+			expect({ status: extracted.status, stderr: extracted.stderr }).toEqual({ status: 0, stderr: "" });
+			const body = extracted.stdout.trim();
+			const headings = readFileSync("CHANGELOG.md", "utf8").split("\n").filter((line) => line.startsWith("## "));
+			const index = headings.findIndex((line) => line.startsWith(`## [${version}] `));
+			const heading = headings[index] ?? "";
+			expect(heading).toMatch(new RegExp(`^## \\[${version.replaceAll(".", "\\.")}\\] - \\d{4}-\\d{2}-\\d{2}$`, "u"));
+			// Pi last saw the release below this one, so the update holds this version's section alone.
+			const lastSeen = /^## \[(\d+\.\d+\.\d+)\]/u.exec(headings[index + 1] ?? "")?.[1] ?? "0.0.0";
+			expect(lastSeen).not.toBe(version);
+			const unreleased = spawnSync("python3", [".github/scripts/changelog_section.py", "CHANGELOG.md", "Unreleased"], {
+				cwd: process.cwd(),
+				encoding: "utf8",
+				timeout: 25_000,
+			});
+			const unreleasedEntries = unreleased.status === 0
+				? unreleased.stdout.split("\n").filter((line) => line.startsWith("- "))
+				: [];
+
+			const workDir = join(root, "work");
+			mkdirSync(workDir);
+			const run = await extensionChangelogUpdates(packageDir, lastSeen, workDir);
+			expect(run.loadErrors).toEqual([]);
+			// Pi reads the changelog at the installed package's root; SoL-Pi sets no pi.changelogPath.
+			expect(run.changelogPath).toBe(join(packageDir, "CHANGELOG.md"));
+			// Pi prefixes the version heading with the package name; the entries follow it.
+			expect(run.updates).toEqual([
+				{ name, version, markdown: `${heading.replace(/^## /u, `## ${name} `)}\n\n${body}` },
+			]);
+			const markdown = run.updates[0]?.markdown ?? "";
+			expect(markdown).not.toContain("[Unreleased]");
+			for (const entry of unreleasedEntries) expect(markdown).not.toContain(entry);
+			expect(markdown).not.toContain(`## ${name} [${lastSeen}]`);
+			expect(run.recorded).toBe(version);
+		} finally {
 			rmSync(root, { recursive: true, force: true });
 		}
 	}, 60_000);

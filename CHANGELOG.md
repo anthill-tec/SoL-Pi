@@ -14,6 +14,11 @@ All notable changes to this project are documented in this file. The format is b
   development dependency is Pi 1.5.2. The compatibility document reviews the Pi 1.5.1 and 1.5.2
   changes, including Anthropic message threads; none needs a change to SoL-Pi.
 
+### Fixed
+
+- Pi now shows SoL-Pi's update notes after an upgrade from npm. The npm package carries
+  `CHANGELOG.md`, which 0.1.1 and earlier left out, so Pi had no notes to show.
+
 ## [0.1.1] - 2026-11-11
 
 ### Upgrading

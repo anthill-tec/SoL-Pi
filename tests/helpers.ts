@@ -6,13 +6,19 @@ import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import type { Context } from "@earendil-works/pi-ai";
 import {
 	fauxAssistantMessage,
+	fauxProvider,
 	fauxText,
 	fauxToolCall,
 	type FauxResponseStep,
 } from "@earendil-works/pi-ai/providers/faux";
 import * as piCodingAgent from "@earendil-works/pi-coding-agent";
 import {
+	createAgentSession,
 	createBashToolDefinition,
+	DefaultResourceLoader,
+	InteractiveMode,
+	SessionManager as PiSessionManager,
+	SettingsManager,
 	type ExtensionAPI,
 	type ExtensionContext,
 	type ExtensionFactory,
@@ -24,7 +30,7 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import type { Component } from "@earendil-works/pi-tui";
 import { readFileSync } from "node:fs";
-import { mkdtemp } from "node:fs/promises";
+import { mkdir, mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -514,6 +520,86 @@ export async function createTempDir(prefix: string, tracked: string[]): Promise<
 	const dir = await mkdtemp(join(tmpdir(), prefix));
 	tracked.push(dir);
 	return dir;
+}
+
+/** One package's notes in Pi's "Extension Updates" startup view. */
+export interface ExtensionChangelogUpdate {
+	name: string;
+	version: string;
+	markdown: string;
+}
+
+/** What Pi's changelog step saw and did for an installed package on a fresh interactive launch. */
+export interface ExtensionChangelogRun {
+	/** The updates Pi's interactive mode shows under "Extension Updates". */
+	updates: ExtensionChangelogUpdate[];
+	/** The version Pi recorded as last seen for the package afterwards. */
+	recorded: string | undefined;
+	/** The extension load errors of the session's resource loader. */
+	loadErrors: unknown[];
+	/** Where Pi found the package's changelog; undefined when it found none. */
+	changelogPath: string | undefined;
+}
+
+/**
+ * Runs Pi's own extension changelog step (`InteractiveMode.getExtensionChangelogUpdates`, Pi 1.5.0+)
+ * on a real session that has the package at `packageDir` installed as a user package, with
+ * `lastSeen` as the version Pi last saw for it (undefined: Pi has never seen it). `workDir` is an
+ * existing, caller-owned directory used as the session's working directory and agent directory root.
+ */
+export async function extensionChangelogUpdates(packageDir: string, lastSeen: string | undefined, workDir: string): Promise<ExtensionChangelogRun> {
+	const cwd = workDir;
+	const agentDir = join(workDir, "agent");
+	await mkdir(agentDir, { recursive: true });
+	const faux = fauxProvider({ provider: "sol-pi-changelog", api: "sol-pi-changelog-api" });
+	const settingsManager = SettingsManager.inMemory(
+		{ packages: [packageDir], compaction: { enabled: false }, retry: { enabled: false } },
+		{ projectTrusted: true },
+	);
+	const key = JSON.stringify({ source: packageDir, scope: "user" });
+	if (lastSeen) settingsManager.setExtensionChangelogVersion(key, lastSeen);
+	const resourceLoader = new DefaultResourceLoader({
+		cwd,
+		agentDir,
+		settingsManager,
+		extensionFactories: [{ name: "changelog-test-provider", factory: (pi) => pi.registerProvider(faux.provider) }],
+		noSkills: true,
+		noPromptTemplates: true,
+		noThemes: true,
+		noContextFiles: true,
+	});
+	await resourceLoader.reload();
+	const loaded = resourceLoader.getExtensions();
+	const installed = loaded.extensions.find((extension) => extension.sourceInfo.origin === "package");
+	const { session } = await createAgentSession({
+		cwd,
+		agentDir,
+		model: faux.getModel(),
+		thinkingLevel: "off",
+		resourceLoader,
+		sessionManager: PiSessionManager.inMemory(cwd),
+		settingsManager,
+	});
+	try {
+		// Pi's own startup step, run on this session as InteractiveMode runs it on a fresh launch. It is a
+		// private step of InteractiveMode.init, whose only public path needs a TUI; docs/compatibility.md
+		// records the coupling, and a Pi that renames or drops it fails here.
+		const mode = InteractiveMode.prototype as unknown as {
+			getExtensionChangelogUpdates?(this: unknown): ExtensionChangelogUpdate[];
+			readPackageJson?: unknown;
+		};
+		if (typeof mode.getExtensionChangelogUpdates !== "function") throw new Error("Pi's InteractiveMode.init step getExtensionChangelogUpdates is missing");
+		if (typeof mode.readPackageJson !== "function") throw new Error("Pi's InteractiveMode readPackageJson is missing");
+		const updates = mode.getExtensionChangelogUpdates.call({ session, settingsManager, readPackageJson: mode.readPackageJson });
+		return {
+			updates,
+			recorded: settingsManager.getExtensionChangelogVersion(key),
+			loadErrors: loaded.errors,
+			changelogPath: installed?.sourceInfo.changelogPath,
+		};
+	} finally {
+		session.dispose();
+	}
 }
 
 /** The text blocks of a provider-request message, joined; a string content as it is. */

@@ -15,6 +15,7 @@
     "scripts/check-sol-pi-config.mjs",
     "agents-install.md",
     "README.md",
+    "CHANGELOG.md",
     "LICENSE",
     "CONTRIBUTING.md",
     "SECURITY.md",
