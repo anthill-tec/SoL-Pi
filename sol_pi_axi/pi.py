@@ -18,7 +18,7 @@ from pathlib import Path
 from .config import ConfigError
 
 #: The Pi versions SoL-Pi is tested against (`scripts/check-pi-compat.mjs`'s list).
-TESTED_PI_VERSIONS = ("0.84.2", "1.0.4", "1.3.0", "1.5.0")
+TESTED_PI_VERSIONS = ("0.84.2", "1.0.4", "1.3.0", "1.5.0", "1.5.2")
 #: The npm package the extension ships as, and the unscoped name earlier checkouts carry.
 NPM_PACKAGE = "@anthill-tec/sol-pi"
 _EARLIER_NPM_PACKAGE = "sol-pi"
