@@ -15,7 +15,6 @@ import {
 	CONFIG_DIR_NAME,
 	createAgentSession,
 	DefaultResourceLoader,
-	InteractiveMode,
 	SessionManager,
 	SettingsManager,
 	type AgentSession,
@@ -24,7 +23,7 @@ import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { DEFAULT_CONFIG, loadSolPiConfig } from "../src/sol-pi/config.ts";
 import { THEN_RUN_FAILED, THEN_RUN_SKIPPED, THEN_RUN_SUCCEEDED } from "../src/sol-pi/extensions/action-fusion/index.ts";
 import { createSolPiExtension } from "../src/sol-pi/index.ts";
-import { createCodemodeExtension, settleWorkerExits, trackWorkerExits } from "./helpers.ts";
+import { createCodemodeExtension, extensionChangelogUpdates, settleWorkerExits, trackWorkerExits } from "./helpers.ts";
 
 type ToolResultMessage = {
 	toolCallId: string;
@@ -216,59 +215,11 @@ describe("Pi 1.5.0 extension update changelogs", () => {
 
 	/** The extension changelog updates Pi's interactive mode shows on a fresh launch of a session with SoL-Pi installed. */
 	async function changelogUpdates(packageDir: string, lastSeen: string | undefined) {
-		const cwd = await tempDir("sol-pi-changelog-cwd-");
-		const agentDir = join(cwd, "agent");
-		await mkdir(agentDir);
-		const faux = fauxProvider({ provider: "sol-pi-changelog", api: "sol-pi-changelog-api" });
-		const settingsManager = SettingsManager.inMemory(
-			{ packages: [packageDir], compaction: { enabled: false }, retry: { enabled: false } },
-			{ projectTrusted: true },
-		);
-		const key = JSON.stringify({ source: packageDir, scope: "user" });
-		if (lastSeen) settingsManager.setExtensionChangelogVersion(key, lastSeen);
-		const resourceLoader = new DefaultResourceLoader({
-			cwd,
-			agentDir,
-			settingsManager,
-			extensionFactories: [{ name: "changelog-test-provider", factory: (pi) => pi.registerProvider(faux.provider) }],
-			noSkills: true,
-			noPromptTemplates: true,
-			noThemes: true,
-			noContextFiles: true,
-		});
-		await resourceLoader.reload();
-		expect(resourceLoader.getExtensions().errors).toEqual([]);
-		const solPi = resourceLoader.getExtensions().extensions.find((extension) => extension.sourceInfo.origin === "package");
+		const run = await extensionChangelogUpdates(packageDir, lastSeen, await tempDir("sol-pi-changelog-cwd-"));
+		expect(run.loadErrors).toEqual([]);
 		// Pi finds SoL-Pi's changelog at the package root; SoL-Pi sets no pi.changelogPath.
-		expect(solPi?.sourceInfo.changelogPath).toBe(join(packageDir, "CHANGELOG.md"));
-		const { session } = await createAgentSession({
-			cwd,
-			agentDir,
-			model: faux.getModel(),
-			thinkingLevel: "off",
-			resourceLoader,
-			sessionManager: SessionManager.inMemory(cwd),
-			settingsManager,
-		});
-		try {
-			// Pi's own startup step, run on this session as InteractiveMode runs it on a fresh launch.
-			const mode = InteractiveMode.prototype as unknown as {
-				getExtensionChangelogUpdates(this: unknown): { name: string; version: string; markdown: string }[];
-				readPackageJson: unknown;
-			};
-			// A private step of Pi's InteractiveMode.init, the only public path to it, which needs a TUI.
-			// docs/compatibility.md records the coupling; a Pi that renames or drops it fails here.
-			expect(typeof mode.getExtensionChangelogUpdates, "Pi's InteractiveMode.init step getExtensionChangelogUpdates").toBe("function");
-			expect(typeof mode.readPackageJson, "Pi's InteractiveMode readPackageJson").toBe("function");
-			const updates = mode.getExtensionChangelogUpdates.call({
-				session,
-				settingsManager,
-				readPackageJson: mode.readPackageJson,
-			});
-			return { updates, recorded: settingsManager.getExtensionChangelogVersion(key) };
-		} finally {
-			session.dispose();
-		}
+		expect(run.changelogPath).toBe(join(packageDir, "CHANGELOG.md"));
+		return { updates: run.updates, recorded: run.recorded };
 	}
 
 	it("shows a release's Keep a Changelog section after an update and never the [Unreleased] section", async () => {
