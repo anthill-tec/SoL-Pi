@@ -390,6 +390,34 @@ class PiVersionTest(InstallTestCase):
                 self.assertEqual(envelope["extension"]["pi"], version)
                 self.assertEqual(envelope["warnings"], [])
 
+    def test_pi_1_5_2_installs_without_an_untested_version_warning(self):
+        """CR-SLP-012 §S2: Pi 1.5.2 is in the tested set."""
+        self.with_pi_default()
+        self.pi.configure(version="1.5.2")
+        result = self.sol("install")
+        self.assert_exit(result, 0)
+        envelope = self.envelope(result)
+        self.assertEqual(envelope["outcome"], "installed")
+        self.assertEqual(envelope["extension"]["pi"], "1.5.2")
+        self.assertEqual(envelope["warnings"], [])
+        self.assertEqual(self.packages(), [self.own_source()])
+
+    def test_pi_1_5_1_warns_naming_all_five_tested_versions_and_installs(self):
+        """CR-SLP-012 §S2: Pi 1.5.1 stays untested; its warning names the five tested versions."""
+        self.with_pi_default()
+        self.pi.configure(version="1.5.1")
+        result = self.sol("install")
+        self.assert_exit(result, 0)
+        envelope = self.envelope(result)
+        self.assertEqual(envelope["outcome"], "installed")
+        self.assertEqual(envelope["extension"]["pi"], "1.5.1")
+        warnings = [w for w in envelope["warnings"] if "1.5.1" in w]
+        self.assertEqual(len(warnings), 1, envelope["warnings"])
+        self.assertEqual(len(envelope["warnings"]), 1, envelope["warnings"])
+        for version in ("0.84.2", "1.0.4", "1.3.0", "1.5.0", "1.5.2"):
+            self.assertRegex(warnings[0], rf"(?<![\d.]){re.escape(version)}(?![\d.])")
+        self.assertEqual(self.packages(), [self.own_source()])
+
 
 class InstallSignalTest(InstallTestCase):
     """§S2: `SIGINT`, `SIGTERM`, `SIGHUP` before registering cancel the run with no `pi` command
