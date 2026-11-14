@@ -1,6 +1,6 @@
 # CR-SLP-013 — Ship CHANGELOG.md in the npm package
 
-**Status:** DRAFT · Pre-review: none — no trigger
+**Status:** PENDING · Pre-review: none — no trigger
 **Type:** defect
 **Priority:** P2 — after an update from npm, Pi shows no update notes for SoL-Pi
 **Depends on:** none

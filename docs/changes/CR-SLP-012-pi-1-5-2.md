@@ -1,6 +1,6 @@
 # CR-SLP-012 — Support Pi 1.5.2
 
-**Status:** DRAFT · Pre-review: ran — touches another project's surface (Model B's setup runs the strict Pi compatibility check and `sol-pi-axi install`, whose warning names the tested set)
+**Status:** PENDING · Pre-review: ran — touches another project's surface (Model B's setup runs the strict Pi compatibility check and `sol-pi-axi install`, whose warning names the tested set)
 **Type:** maintenance
 **Priority:** P1 — the current Pi release fails SoL-Pi's strict compatibility check, and `sol-pi-axi install` warns on it
 **Depends on:** none

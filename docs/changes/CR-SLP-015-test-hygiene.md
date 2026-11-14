@@ -46,8 +46,10 @@ with the tests named as they stand on `develop` at `0b1e6e2`:
 - Four entry-point scenarios in `tests/online-context-compact-subagents.test.ts` passed before the
   fix; they guard against regressions and prove nothing about the fix. That is their purpose, and
   this CR changes nothing there.
-- The Crucible client filed CR-SLP-011's targeted run with no tier. That is the Crucible client's
-  behaviour, not SoL-Pi's code, so it is not in this CR.
+- The Crucible client filed CR-SLP-011's targeted run with no tier. That is by design in the
+  client: its `test` verb claims no tier (CR-CRU-111), and a tier comes only from a tier verb
+  (`unit`, `integration`, …). Nothing changes in SoL-Pi; this CR's own targeted runs use a tier
+  verb where a tier matters.
 
 ## Scope
 
@@ -55,7 +57,7 @@ with the tests named as they stand on `develop` at `0b1e6e2`:
 
 **Surfaces:** `tests/install-guide.test.ts`, `tests/test_sol_pi_axi_package.py`, the test helpers.
 
-Proposed disposition of each F2 item (PROPOSED until the user rules):
+Disposition of each F2 item, as the user ruled on 2026-11-14 (all seven as proposed):
 
 | Item | Disposition |
 |---|---|
@@ -96,7 +98,7 @@ Proposed disposition of each F2 item (PROPOSED until the user rules):
 
 ## Acceptance criteria
 
-- [ ] **§S1** The user's ruling on each F2 item is recorded in this spec before RED.
+- [x] **§S1** The user's ruling on each F2 item is recorded in this spec before RED (2026-11-14).
 - [ ] **§S1** `tests/install-guide.test.ts` holds no hard-coded list of `sol-pi-axi` flags, envelope
       keys or outcomes; the lists come from `sol_pi_axi` at run time.
 - [ ] **§S1** Adding a flag to `setup`'s parser without documenting it fails a test; documenting a
